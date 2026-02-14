@@ -54,7 +54,8 @@ const state = {
   syncRev: 0,
   outOfSync: false,
   docHistory: [],
-  docHistoryMax: 30
+  docHistoryMax: 30,
+  lastProgrammaticEditorText: null
 };
 
 const els = {
@@ -139,6 +140,7 @@ const els = {
   btnExpandRight: $("btnExpandRight"),
   btnCopyDiagnostics: $("btnCopyDiagnostics"),
   btnRestoreSnapshot: $("btnRestoreSnapshot"),
+  ctxMenu: $("ctxMenu"),
   newDialog: $("newDialog"),
   btnNewCancel: $("btnNewCancel"),
   btnAddNode: $("btnAddNode"),
@@ -276,6 +278,71 @@ function setOutOfSync(flag, reason = "") {
 function devLog(...args) {
   if (!state.devMode) return;
   console.log("[dev]", ...args);
+}
+
+function closeContextMenu() {
+  if (!els.ctxMenu) return;
+  els.ctxMenu.classList.add("hidden");
+  els.ctxMenu.setAttribute("aria-hidden", "true");
+  els.ctxMenu.innerHTML = "";
+}
+
+function showContextMenu(clientX, clientY, buildItems) {
+  if (!els.ctxMenu) return;
+  els.ctxMenu.innerHTML = "";
+  buildItems(els.ctxMenu);
+  if (!els.ctxMenu.children.length) return;
+  els.ctxMenu.classList.remove("hidden");
+  els.ctxMenu.setAttribute("aria-hidden", "false");
+  const vw = window.innerWidth || 0;
+  const vh = window.innerHeight || 0;
+  const rect = els.ctxMenu.getBoundingClientRect();
+  const x = Math.max(8, Math.min(clientX, Math.max(8, vw - rect.width - 8)));
+  const y = Math.max(8, Math.min(clientY, Math.max(8, vh - rect.height - 8)));
+  els.ctxMenu.style.left = `${x}px`;
+  els.ctxMenu.style.top = `${y}px`;
+}
+
+function addCtxTitle(container, text) {
+  const div = document.createElement("div");
+  div.className = "ctxTitle";
+  div.textContent = text;
+  container.appendChild(div);
+}
+
+function addCtxItem(container, label, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ctxItem";
+  btn.textContent = label;
+  btn.addEventListener("click", (evt) => {
+    evt.preventDefault();
+    evt.stopPropagation();
+    closeContextMenu();
+    onClick();
+  });
+  container.appendChild(btn);
+}
+
+function addCtxGroup(container, label, items) {
+  const details = document.createElement("details");
+  details.className = "ctxGroup";
+  const summary = document.createElement("summary");
+  summary.textContent = label;
+  const body = document.createElement("div");
+  body.className = "ctxGroupBody";
+  for (const it of items) {
+    addCtxItem(body, it.label, it.onClick);
+  }
+  details.appendChild(summary);
+  details.appendChild(body);
+  details.addEventListener("mouseenter", () => {
+    details.open = true;
+  });
+  details.addEventListener("mouseleave", () => {
+    details.open = false;
+  });
+  container.appendChild(details);
 }
 
 function normalizeHexColor(value) {
@@ -892,6 +959,11 @@ async function initEditor() {
 
   const onChange = debounce(() => {
     if (state.syncingEditor) return;
+    const current = state.editor.getValue();
+    if (state.lastProgrammaticEditorText !== null && current === state.lastProgrammaticEditorText) {
+      state.lastProgrammaticEditorText = null;
+      return;
+    }
     state.textDirty = true;
     updateApplyButton();
     setStatus("dirty", "dirty");
@@ -923,6 +995,7 @@ function updateEditorText(text) {
     taScroll = [els.srcTextarea.scrollTop || 0, els.srcTextarea.scrollLeft || 0];
   }
   state.syncingEditor = true;
+  state.lastProgrammaticEditorText = text ?? "";
   state.editor.setValue(text);
   state.syncingEditor = false;
   if (state.editor?.cm && cmCursor && cmScroll) {
@@ -2388,7 +2461,7 @@ function attachNodeInteractions(svg) {
   });
 
   let dragNode = null;
-  const DRAG_THRESHOLD_PX = 4;
+  const DRAG_THRESHOLD_PX = 2;
 
   let connectDrag = null;
 
@@ -2422,6 +2495,10 @@ function attachNodeInteractions(svg) {
     const node = state.model.nodes.find((n) => n.id === id);
     if (!node) return;
     const offset = getPinnedOffset(node);
+    const currentTranslate = parseTranslate(g.getAttribute("transform"));
+    const pt = clientToSvg(svg, evt.clientX, evt.clientY);
+    const baseX = parseFloat(g.dataset.baseX || String(currentTranslate.x - offset.x));
+    const baseY = parseFloat(g.dataset.baseY || String(currentTranslate.y - offset.y));
     dragNode = {
       g,
       id,
@@ -2433,7 +2510,10 @@ function attachNodeInteractions(svg) {
       lastClientY: evt.clientY,
       startPos: { ...offset },
       active: false,
-      rafId: 0
+      baseX,
+      baseY,
+      grabX: pt.x - currentTranslate.x,
+      grabY: pt.y - currentTranslate.y
     };
     g.setPointerCapture(evt.pointerId);
     evt.preventDefault();
@@ -2464,18 +2544,12 @@ function attachNodeInteractions(svg) {
       });
     }
 
-    if (dragNode.rafId) return;
-    dragNode.rafId = requestAnimationFrame(() => {
-      if (!dragNode || !dragNode.active) return;
-      dragNode.rafId = 0;
-      const dx = (dragNode.lastClientX - dragNode.startClientX) / state.zoom;
-      const dy = (dragNode.lastClientY - dragNode.startClientY) / state.zoom;
-      const baseX = parseFloat(dragNode.g.dataset.baseX || "0");
-      const baseY = parseFloat(dragNode.g.dataset.baseY || "0");
-      const next = { x: dragNode.startPos.x + dx, y: dragNode.startPos.y + dy };
-      setPinnedOffset(dragNode.node, next);
-      setNodeTransform(dragNode.g, baseX + next.x, baseY + next.y);
-    });
+    const pt = clientToSvg(svg, dragNode.lastClientX, dragNode.lastClientY);
+    const targetX = pt.x - dragNode.grabX;
+    const targetY = pt.y - dragNode.grabY;
+    const next = { x: targetX - dragNode.baseX, y: targetY - dragNode.baseY };
+    setPinnedOffset(dragNode.node, next);
+    setNodeTransform(dragNode.g, targetX, targetY);
   });
 
   svg.addEventListener("pointerup", (evt) => {
@@ -2510,15 +2584,13 @@ function attachNodeInteractions(svg) {
     }
     if (!dragNode) return;
     if (evt.pointerId !== dragNode.pointerId) return;
-    if (dragNode.rafId) {
-      cancelAnimationFrame(dragNode.rafId);
-      dragNode.rafId = 0;
-    }
     const id = dragNode.id;
     if (dragNode.active) {
-      const dx = (evt.clientX - dragNode.startClientX) / state.zoom;
-      const dy = (evt.clientY - dragNode.startClientY) / state.zoom;
-      const finalOffset = { x: dragNode.startPos.x + dx, y: dragNode.startPos.y + dy };
+      const pt = clientToSvg(svg, evt.clientX, evt.clientY);
+      const finalOffset = {
+        x: pt.x - dragNode.grabX - dragNode.baseX,
+        y: pt.y - dragNode.grabY - dragNode.baseY
+      };
       setPinnedOffset(dragNode.node, finalOffset);
       dragNode.g.releasePointerCapture(evt.pointerId);
       dragNode = null;
@@ -3119,6 +3191,179 @@ function wirePreviewZoom() {
   );
 }
 
+function wireContextMenu() {
+  const wrap = $("previewWrap");
+  if (!wrap || !els.ctxMenu) return;
+
+  const hide = () => closeContextMenu();
+  window.addEventListener("click", hide);
+  window.addEventListener(
+    "scroll",
+    () => {
+      hide();
+    },
+    true
+  );
+  window.addEventListener("resize", hide);
+  window.addEventListener("keydown", (evt) => {
+    if (evt.key === "Escape") hide();
+  });
+
+  wrap.addEventListener("contextmenu", (evt) => {
+    const svg = els.preview.querySelector("svg");
+    if (!svg) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+
+    const nodeEl = evt.target.closest("g.node");
+    const edgeEl = evt.target.closest("g.edgePath");
+
+    if (nodeEl) {
+      const nodeId = getNodeIdFromGroup(nodeEl);
+      const node = state.model.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      showContextMenu(evt.clientX, evt.clientY, (menu) => {
+        addCtxTitle(menu, `Node: ${node.id}`);
+        addCtxItem(menu, "選択", () => selectNodeById(node.id));
+        addCtxItem(menu, "Connect mode ON", () => {
+          selectNodeById(node.id);
+          setConnectMode(true);
+          showToast("接続ハンドルをドラッグして接続先を選択");
+        });
+        addCtxGroup(menu, "形状", [
+          {
+            label: "Rectangle",
+            onClick: () => {
+              node.shape = "rect";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node shape changed");
+            }
+          },
+          {
+            label: "Round",
+            onClick: () => {
+              node.shape = "round";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node shape changed");
+            }
+          },
+          {
+            label: "Circle",
+            onClick: () => {
+              node.shape = "circle";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node shape changed");
+            }
+          },
+          {
+            label: "Diamond",
+            onClick: () => {
+              node.shape = "diamond";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node shape changed");
+            }
+          }
+        ]);
+        addCtxGroup(menu, "色", [
+          {
+            label: "Blue",
+            onClick: () => {
+              node.className = "accent-blue";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node class changed");
+            }
+          },
+          {
+            label: "Green",
+            onClick: () => {
+              node.className = "accent-green";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node class changed");
+            }
+          },
+          {
+            label: "Amber",
+            onClick: () => {
+              node.className = "accent-amber";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node class changed");
+            }
+          },
+          {
+            label: "Red",
+            onClick: () => {
+              node.className = "accent-red";
+              renderFromModel();
+              pushHistory();
+              markModelDirty("node class changed");
+            }
+          }
+        ]);
+        addCtxItem(menu, node.pinned ? "Unpin" : "Pin", () => {
+          node.pinned = !node.pinned;
+          if (!node.pinned) {
+            node.position = null;
+            node.pinnedOffset = null;
+          }
+          renderFromModel();
+          pushHistory();
+          markModelDirty("node pin changed");
+        });
+        addCtxItem(menu, "削除", () => {
+          state.selectedNodeId = node.id;
+          state.selectedEdgeId = null;
+          deleteSelected();
+        });
+      });
+      return;
+    }
+
+    if (edgeEl) {
+      const edgeId = edgeEl.dataset.aeEdgeId || null;
+      const edge = edgeId ? state.model.edges.find((e) => e.id === edgeId) : null;
+      if (!edge) return;
+      showContextMenu(evt.clientX, evt.clientY, (menu) => {
+        addCtxTitle(menu, `Edge: ${edge.id}`);
+        addCtxItem(menu, "選択", () => selectEdgeById(edge.id));
+        addCtxItem(menu, "破線切替", () => {
+          edge.style = { ...(edge.style || {}) };
+          edge.style.dashed = !edge.style.dashed;
+          if (!edge.style.dashed) delete edge.style.dashed;
+          if (!Object.keys(edge.style).length) delete edge.style;
+          renderFromModel();
+          pushHistory();
+          markModelDirty("edge style changed");
+        });
+        addCtxItem(menu, "削除", () => {
+          state.selectedEdgeId = edge.id;
+          state.selectedNodeId = null;
+          deleteSelected();
+        });
+      });
+      return;
+    }
+
+    showContextMenu(evt.clientX, evt.clientY, (menu) => {
+      addCtxTitle(menu, "Canvas");
+      addCtxItem(menu, state.connectMode ? "Connect mode OFF" : "Connect mode ON", () => {
+        setConnectMode(!state.connectMode);
+      });
+      addCtxItem(menu, "パンをリセット", () => {
+        state.panX = 0;
+        state.panY = 0;
+        applyZoom();
+      });
+    });
+  });
+}
+
 function wireSplitters() {
   const leftSplitter = document.querySelector('.splitter[data-split="left"]');
   const rightSplitter = document.querySelector('.splitter[data-split="right"]');
@@ -3481,6 +3726,7 @@ async function boot() {
   wireToolbar();
   wireModelControls();
   wirePreviewZoom();
+  wireContextMenu();
   wireSplitters();
   wireKeys();
   wireNewDialog();

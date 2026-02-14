@@ -190,6 +190,10 @@ body.dragging {
   font-size: 12px;
 }
 .input.wide { width: 100%; }
+.input.invalid {
+  border-color: rgba(255, 107, 107, 0.9);
+  box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.35) inset;
+}
 
 .lbl {
   font-size: var(--text-sm);
@@ -710,6 +714,89 @@ body.problems-collapsed .problemsList {
 
 .toast.hidden {
   display: none;
+}
+
+.contextMenu {
+  position: fixed;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(10, 17, 26, 0.98);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+  display: grid;
+  gap: 4px;
+}
+
+.contextMenu.hidden {
+  display: none;
+}
+
+.contextMenu .ctxTitle {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 6px;
+}
+
+.contextMenu .ctxItem {
+  text-align: left;
+  background: var(--btn);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.contextMenu .ctxItem:hover {
+  background: var(--btnHover);
+}
+
+.contextMenu .ctxGroup {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+  overflow: visible;
+}
+
+.contextMenu .ctxGroup > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--btn);
+}
+
+.contextMenu .ctxGroup > summary::-webkit-details-marker {
+  display: none;
+}
+
+.contextMenu .ctxGroup[open] > summary {
+  background: var(--btnHover);
+}
+
+.contextMenu .ctxGroupBody {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 0;
+  min-width: 180px;
+  display: none;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(10, 17, 26, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  z-index: 2100;
+}
+
+.contextMenu .ctxGroup[open] .ctxGroupBody {
+  display: grid;
 }
 
 .edgeToggles {
