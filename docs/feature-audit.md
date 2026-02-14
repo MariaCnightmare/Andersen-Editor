@@ -45,6 +45,10 @@
   - code: `src/core/generateMermaid.js:111`, `src/core/generateMermaid.js:118`
 - Parser no longer treats `class` / `classDef` lines as nodes:
   - code: `src/renderer/renderer.js:1090`
+- Parser also excludes Mermaid meta lines (`style`, `linkStyle`, `click`, `link`, `accTitle`, `accDescr`, directives/comments):
+  - code: `src/renderer/editorUtils.mjs`, `src/renderer/renderer.js`
+- Render failure fallback keeps last successful SVG (does not replace preview with flattened Mermaid text):
+  - code: `src/renderer/renderer.js`
 
 ## Follow-ups
 - Add optional E2E for apply-time parse error diagnostics and non-crash behavior (see `docs/e2e-plan.md`).

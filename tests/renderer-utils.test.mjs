@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildInternalBlocksText,
   computeAutoUiZoomFactor,
+  isMermaidMetaLine,
   isEditableTarget,
   normalizeUiScaleChoice,
   prepareContentForSave,
@@ -100,4 +101,13 @@ test("roundtrip_preserves_display_name", () => {
   normalizeNodeClassName(node);
   assert.equal(node.classDisplayName, "VPN1 role");
   assert.equal(node.className, "vpn1_role");
+});
+
+test("mermaid_meta_lines_are_detected", () => {
+  assert.equal(isMermaidMetaLine("classDef role_a fill:#fff"), true);
+  assert.equal(isMermaidMetaLine("class A role_a;"), true);
+  assert.equal(isMermaidMetaLine("style A fill:#fff"), true);
+  assert.equal(isMermaidMetaLine("linkStyle 0 stroke:#333"), true);
+  assert.equal(isMermaidMetaLine("%%{init: {\"theme\":\"dark\"}}%%"), true);
+  assert.equal(isMermaidMetaLine("A --> B"), false);
 });

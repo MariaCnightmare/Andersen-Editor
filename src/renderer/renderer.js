@@ -4,6 +4,7 @@ import { generateMermaid } from "../core/generateMermaid.js";
 import { extractModelFromText, embedModelComment } from "../core/codec.js";
 import {
   buildInternalBlocksText,
+  isMermaidMetaLine,
   normalizeUiScaleChoice,
   resolveUiZoomFactor,
   isEditableTarget,
@@ -1131,9 +1132,7 @@ function parseMermaidToModel(text) {
     const { text: line, lineNo } = lines[i];
     const trimmed = line.trim();
     if (!trimmed) continue;
-    if (trimmed.startsWith("%%")) continue;
-
-    if (/^classDef\b/i.test(trimmed) || /^class\b/i.test(trimmed)) {
+    if (isMermaidMetaLine(trimmed)) {
       if (/^class\[/i.test(trimmed)) {
         warnings.push({
           type: "warn",
@@ -1149,6 +1148,7 @@ function parseMermaidToModel(text) {
           column: 1
         });
       }
+      // keep as RAW so original text is preserved, but never parsed as node/edge.
       unsupportedBuffer.push({ text: line, lineNo });
       continue;
     }
@@ -2170,17 +2170,13 @@ async function renderMermaid(text) {
   clearError({ preserveStatus: (state.mode === "text" && state.textDirty) || state.parseWarnings.length > 0 });
 
   const container = els.preview;
-  container.innerHTML = "";
-  const node = document.createElement("div");
-  node.className = "mermaid";
-  node.textContent = text;
-  container.appendChild(node);
 
   try {
     const mermaid = await getMermaid();
     if (!mermaid) throw new Error("Mermaid module not found");
     const result = await mermaid.render(`mmd-${seq}`, text);
-    container.innerHTML = result.svg || result;
+    const svgText = result.svg || result;
+    container.innerHTML = svgText;
 
     if (seq !== state.renderSeq) return;
     const svgEl = container.querySelector("svg");
@@ -2211,6 +2207,9 @@ async function renderMermaid(text) {
     }
   } catch (err) {
     if (seq !== state.renderSeq) return;
+    if (state.lastSvgText) {
+      container.innerHTML = state.lastSvgText;
+    }
     setProblems([parseMermaidError(err)], { status: "error", open: true });
     console.error(err);
   }

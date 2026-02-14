@@ -15,6 +15,13 @@ export function normalizeUiScaleChoice(value) {
   return String(n);
 }
 
+export function isMermaidMetaLine(line) {
+  const t = String(line || "").trim();
+  if (!t) return false;
+  if (t.startsWith("%%")) return true;
+  return /^(classDef|class|style|linkStyle|click|link|accTitle|accDescr)\b/i.test(t);
+}
+
 export function computeAutoUiZoomFactor({ devicePixelRatio, displayScale }) {
   const dpr = Number(devicePixelRatio) || 1;
   const ds = Number(displayScale) || dpr || 1;
