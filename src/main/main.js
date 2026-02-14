@@ -452,3 +452,17 @@ ipcMain.handle("export:pdf", async (_evt, args) => {
   fs.writeFileSync(result.filePath, pdfBuffer);
   return { ok: true, filePath: result.filePath };
 });
+
+ipcMain.handle("export:modelJson", async (_evt, args) => {
+  const win = ensureWindow();
+  const { modelJson, defaultFilePath } = args || {};
+  if (!modelJson) return { ok: false, error: "modelJson is empty." };
+  const result = await dialog.showSaveDialog(win, {
+    title: "MODEL(JSON)としてエクスポート",
+    defaultPath: defaultFilePath || "diagram.model.json",
+    filters: [{ name: "JSON", extensions: ["json"] }]
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  fs.writeFileSync(result.filePath, modelJson, "utf-8");
+  return { ok: true, filePath: result.filePath };
+});

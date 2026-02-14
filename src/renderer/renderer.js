@@ -106,6 +106,7 @@ const els = {
   btnExportSvg: $("btnExportSvg"),
   btnExportPng: $("btnExportPng"),
   btnExportPdf: $("btnExportPdf"),
+  btnExportModelJson: $("btnExportModelJson"),
   btnZoomOut: $("btnZoomOut"),
   btnZoomIn: $("btnZoomIn"),
   btnZoomReset: $("btnZoomReset"),
@@ -382,6 +383,41 @@ function parseMermaidError(err) {
   const m = msg.match(/line\s+(\d+)(?:\s*,\s*col(?:umn)?\s+(\d+))?/i);
   if (!m) return { type: "error", message: msg };
   return { type: "error", message: msg, line: parseInt(m[1], 10), column: m[2] ? parseInt(m[2], 10) : 1 };
+}
+
+function parseMermaidErrorWithContext(err, text) {
+  const base = parseMermaidError(err);
+  const line = err?.hash?.loc?.first_line || base.line || null;
+  const column = err?.hash?.loc?.first_column != null ? err.hash.loc.first_column + 1 : base.column || null;
+  const lines = String(text || "").split(/\r?\n/);
+  const source = line && lines[line - 1] ? lines[line - 1].slice(0, 80) : "";
+  return {
+    type: "error",
+    message: base.message,
+    line,
+    column,
+    source
+  };
+}
+
+async function validateMermaidSyntax(text) {
+  const mermaid = await getMermaid();
+  if (!mermaid?.parse) return { ok: true };
+  try {
+    await mermaid.parse(text);
+    return { ok: true };
+  } catch (err) {
+    const detail = parseMermaidErrorWithContext(err, text);
+    return {
+      ok: false,
+      problem: {
+        type: "error",
+        message: `${detail.message}${detail.source ? ` | source: ${detail.source}` : ""}`,
+        line: detail.line,
+        column: detail.column
+      }
+    };
+  }
 }
 
 function openProblemsDock(forceOpen = false) {
@@ -2036,12 +2072,8 @@ async function renderMermaid(text) {
   try {
     const mermaid = await getMermaid();
     if (!mermaid) throw new Error("Mermaid module not found");
-    if (mermaid.run) {
-      await mermaid.run({ nodes: [node] });
-    } else {
-      const result = await mermaid.render(`mmd-${seq}`, text);
-      container.innerHTML = result.svg || result;
-    }
+    const result = await mermaid.render(`mmd-${seq}`, text);
+    container.innerHTML = result.svg || result;
 
     if (seq !== state.renderSeq) return;
     const svgEl = container.querySelector("svg");
@@ -2252,6 +2284,21 @@ function wireToolbar() {
     if (!res.ok && !res.canceled) showError(res.error || "PDF export failed");
   });
 
+  if (els.btnExportModelJson) {
+    els.btnExportModelJson.addEventListener("click", async () => {
+      try {
+        const modelJson = getModelJsonText();
+        const defaultFilePath = state.filePath
+          ? state.filePath.replace(/\.[^.]+$/, ".model.json")
+          : "diagram.model.json";
+        const res = await window.api.exportModelJson({ modelJson, defaultFilePath });
+        if (!res.ok && !res.canceled) showError(res.error || "MODEL export failed");
+      } catch (err) {
+        showError(err);
+      }
+    });
+  }
+
   els.btnZoomIn.addEventListener("click", (evt) => {
     const step = evt.shiftKey ? 0.25 : 0.1;
     zoomByStep(step);
@@ -2444,7 +2491,13 @@ function wireToolbar() {
   }
 
   if (els.btnApplyText) {
-    els.btnApplyText.addEventListener("click", () => {
+    els.btnApplyText.addEventListener("click", async () => {
+      const text = getEditorBaseText();
+      const validation = await validateMermaidSyntax(text);
+      if (!validation.ok) {
+        setProblems([validation.problem], { status: "error", open: true });
+        return;
+      }
       renderFromText({ live: false });
     });
   }
@@ -2741,6 +2794,11 @@ function getSvgText() {
     svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   }
   return svgEl.outerHTML;
+}
+
+function getModelJsonText() {
+  const model = normalizeModelClassNames(clone(state.model || {}));
+  return JSON.stringify(model, null, 2);
 }
 
 async function svgToPng(svgText) {

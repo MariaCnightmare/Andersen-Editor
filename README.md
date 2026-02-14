@@ -2,6 +2,11 @@
 
 Mermaid + 図形編集（Hybrid Infra Pack）
 
+## Security Note
+
+- Mermaid の `securityLevel` は `loose` で動作します。
+- 信頼できる入力（自身で作成した Mermaid / 管理されたプロジェクトファイル）を前提に利用してください。
+
 ## WSLg / HiDPI で表示が荒いとき
 
 WSLg では分数スケーリング（125%など）や XWayland 経由表示でボケが出ることがあります。以下を順に試してください。

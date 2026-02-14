@@ -11,6 +11,7 @@ const ACTION_TO_DOM_ID = {
   "file:exportSvg": "btnExportSvg",
   "file:exportPng": "btnExportPng",
   "file:exportPdf": "btnExportPdf",
+  "file:exportModelJson": "btnExportModelJson",
 
   // Edit / Diagram
   "edit:undo": "btnUndo",
@@ -125,4 +126,3 @@ ipcRenderer.on("ae:menuAction", (_evt, action) => {
 onReady(() => {
   wireStateObservers();
 });
-

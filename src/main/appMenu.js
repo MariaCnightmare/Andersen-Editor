@@ -66,6 +66,10 @@ function installAppMenu(win) {
           label: "PDFを書き出し…",
           click: () => sendAction(win, "file:exportPdf")
         },
+        {
+          label: "MODEL(JSON)を書き出し…",
+          click: () => sendAction(win, "file:exportModelJson")
+        },
         { type: "separator" },
         ...(isMac ? [{ role: "close" }] : [{ role: "quit" }])
       ]
