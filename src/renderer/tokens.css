@@ -1,0 +1,57 @@
+:root {
+  --surface-0: #0a0d12;
+  --surface-1: #11161d;
+  --surface-2: #171f28;
+
+  --text-1: #e6edf6;
+  --text-2: #aeb9c9;
+  --text-3: #8694a8;
+
+  --border-1: rgba(255, 255, 255, 0.08);
+  --border-2: rgba(255, 255, 255, 0.16);
+  --border-3: rgba(91, 171, 255, 0.7);
+
+  --accent-1: #5babff;
+  --accent-2: #77d9ff;
+
+  --danger: #ff6f7d;
+  --warn: #f7c96d;
+  --ok: #49cf95;
+  --info: #80b7ff;
+
+  --r-8: 8px;
+  --r-12: 12px;
+
+  --sp-4: 4px;
+  --sp-6: 6px;
+  --sp-8: 8px;
+  --sp-12: 12px;
+  --sp-16: 16px;
+
+  --shadow-1: 0 8px 20px rgba(0, 0, 0, 0.22);
+  --shadow-2: 0 16px 28px rgba(0, 0, 0, 0.28);
+  --glow-accent: 0 0 0 2px rgba(91, 171, 255, 0.22);
+
+  --t-fast: 120ms;
+  --t-mid: 180ms;
+  --t-base: var(--t-mid);
+  --ease: cubic-bezier(.2, .7, .2, 1);
+
+  /* Compatibility aliases */
+  --bg: var(--surface-0);
+  --panel: var(--surface-1);
+  --panel2: var(--surface-1);
+  --panel3: var(--surface-2);
+  --text: var(--text-1);
+  --muted: var(--text-2);
+  --border: var(--border-1);
+  --accent: var(--accent-1);
+  --accent2: var(--accent-2);
+  --btn: var(--surface-2);
+  --btnHover: color-mix(in srgb, var(--surface-2) 82%, white 18%);
+  --input: color-mix(in srgb, var(--surface-2) 90%, black 10%);
+  --radius: var(--r-12);
+  --radius-sm: var(--r-8);
+  --pad: var(--sp-8);
+  --pad-sm: var(--sp-6);
+}
