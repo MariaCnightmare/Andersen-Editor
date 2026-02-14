@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy"
+        content="
+          default-src 'self';
+          script-src 'self';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: blob:;
+          font-src 'self' data:;
+          connect-src 'self';
+          worker-src 'self' blob:;
+          base-uri 'none';
+          form-action 'none';
+          frame-ancestors 'none';
+        ">
+  <title>Andersen Editor</title>
+
+  <link rel="stylesheet" href="../../node_modules/codemirror/lib/codemirror.css" />
+  <link rel="stylesheet" href="../../node_modules/codemirror/theme/material-darker.css" />
+  <script src="../../node_modules/codemirror/lib/codemirror.js"></script>
+  <script src="../../node_modules/codemirror/mode/markdown/markdown.js"></script>
+
+  <script src="../../node_modules/mermaid/dist/mermaid.min.js"></script>
+
+  <link rel="stylesheet" href="./style.css?v=2" />
+</head>
+
+<body>
+  <div id="newDialog" class="modal hidden">
+    <div class="modalCard">
+      <div class="modalTitle">新規作成</div>
+      <div class="modalBody">
+        <button class="btn modalBtn" data-template="empty">Empty</button>
+        <button class="btn modalBtn" data-template="sample">Infra Sample</button>
+        <button class="btn modalBtn" data-template="web3">Web 3-Tier</button>
+        <button class="btn modalBtn" data-template="vpn">VPN</button>
+        <button class="btn modalBtn" data-template="simple">Simple Flow</button>
+      </div>
+      <div class="modalFooter">
+        <button id="btnNewCancel" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <div id="textPromptDialog" class="modal hidden">
+    <div class="modalCard">
+      <div id="textPromptTitle" class="modalTitle">Input</div>
+      <div class="modalBody">
+        <input id="textPromptInput" class="input wide" />
+      </div>
+      <div class="modalFooter">
+        <button id="btnTextPromptCancel" class="btn">Cancel</button>
+        <button id="btnTextPromptOk" class="btn">OK</button>
+      </div>
+    </div>
+  </div>
+  <div id="exportDialog" class="modal hidden">
+    <div class="modalCard exportCard">
+      <div class="modalTitle">Export</div>
+      <div class="modalBody exportBody">
+        <div class="propRow">
+          <label class="propLabel" for="exportFormat">形式</label>
+          <select id="exportFormat" class="select">
+            <option value="mermaid">Mermaid source (.mmd)</option>
+            <option value="svg">SVG (.svg)</option>
+          </select>
+        </div>
+        <div class="propRow">
+          <label class="propLabel" for="exportPathInput">保存先（パス）</label>
+          <div class="row">
+            <input id="exportPathInput" class="input wide mono" placeholder="/home/user/exports/diagram.mmd" />
+            <button id="btnExportBrowse" class="btn" type="button">参照...</button>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="exportOpenFolder" />
+          Open folder after export
+        </label>
+        <div id="exportError" class="exportError hidden"></div>
+      </div>
+      <div class="modalFooter">
+        <button id="btnExportCancel" class="btn" type="button">Cancel</button>
+        <button id="btnExportRun" class="btn" type="button">Export</button>
+      </div>
+    </div>
+  </div>
+  <header class="toolbar">
+    <div class="brand">
+      Andersen Editor
+      <span class="sub">Hybrid Infra Pack / Mermaid Round-trip</span>
+    </div>
+
+    <div class="group nativeMenuOnly">
+      <details class="menu">
+        <summary class="btn">File</summary>
+        <div class="menuPanel">
+          <button id="btnNew" class="btn">新規</button>
+          <button id="btnOpen" class="btn">開く</button>
+          <button id="btnSave" class="btn">保存</button>
+          <button id="btnSaveAs" class="btn">名前を付けて保存</button>
+        </div>
+      </details>
+      <details class="menu">
+        <summary class="btn">Clipboard</summary>
+        <div class="menuPanel">
+          <button id="btnCopyMermaid" class="btn">Copy Mermaid</button>
+          <button id="btnPasteMermaid" class="btn">Paste Mermaid</button>
+          <button id="btnCopySvg" class="btn">Copy SVG</button>
+          <button id="btnCopyPng" class="btn">Copy PNG</button>
+        </div>
+      </details>
+      <details class="menu">
+        <summary class="btn">Export</summary>
+        <div class="menuPanel">
+          <button id="btnExportMermaid" class="btn">Mermaid</button>
+          <button id="btnExportSvg" class="btn">SVG</button>
+          <button id="btnExportPng" class="btn">PNG</button>
+          <button id="btnExportPdf" class="btn">PDF</button>
+          <button id="btnExportModelJson" class="btn">MODEL(JSON)</button>
+        </div>
+      </details>
+    </div>
+
+    <div class="group">
+      <button id="btnUndo" class="btn">Undo</button>
+      <button id="btnRedo" class="btn">Redo</button>
+      <button id="btnFormat" class="btn">Format</button>
+      <button id="btnApplyText" class="btn">Apply <span class="applyBadge">●</span></button>
+      <button id="btnRelayout" class="btn">Re-layout</button>
+      <button id="btnConnect" class="btn">Connect</button>
+      <button id="btnToggleInspector" class="btn">Inspector</button>
+    </div>
+
+    <div class="group">
+      <label class="lbl">Theme</label>
+      <select id="selTheme" class="select"></select>
+
+      <label class="lbl">Direction</label>
+      <select id="selDir" class="select">
+        <option value="LR">LR</option>
+        <option value="TB">TB</option>
+      </select>
+
+      <label class="lbl">Mode</label>
+      <select id="selMode" class="select">
+        <option value="model">モデル編集</option>
+        <option value="text" selected>テキスト編集</option>
+      </select>
+
+      <label class="toggle">
+        <input type="checkbox" id="toggleDevMode" />
+        Dev mode
+      </label>
+
+      <label class="lbl">UI Scale</label>
+      <select id="selUiScale" class="select">
+        <option value="auto">Auto</option>
+        <option value="0.8">80%</option>
+        <option value="0.9">90%</option>
+        <option value="1">100%</option>
+        <option value="1.1">110%</option>
+        <option value="1.2">120%</option>
+      </select>
+
+      <label class="lbl">Ozone</label>
+      <select id="selOzone" class="select">
+        <option value="auto">Auto</option>
+        <option value="wayland">Wayland</option>
+        <option value="x11">X11</option>
+      </select>
+    </div>
+
+    <div class="status">
+      <div class="statusMain">
+        <span id="statusText" class="mono">ready</span>
+        <span id="statusDpr" class="mono">dpr:1</span>
+        <span id="statusZoom" class="mono">zoom:1</span>
+        <span id="statusBackend" class="mono">backend:unknown</span>
+      </div>
+      <div class="statusMeta">
+        <span id="statusSession" class="mono">session:unknown</span>
+        <span id="statusDisplays" class="mono">display:</span>
+        <span id="statusScale" class="mono">displayScale:1</span>
+        <span id="statusUiScale" class="mono">uiScale:auto</span>
+        <span id="statusOzone" class="mono">ozone:auto</span>
+        <span id="statusGpu" class="mono"></span>
+        <span id="statusSizes" class="mono">screen:0x0 win:0x0</span>
+        <span id="statusWarn" class="mono"></span>
+      </div>
+      <div id="taskProgress" class="taskProgress hidden" aria-live="polite">
+        <div id="taskProgressBar" class="taskProgressBar indeterminate"></div>
+        <span id="taskProgressLabel" class="mono">processing...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout" id="layout">
+    <section class="pane" id="paneLeft">
+      <div class="paneHead">
+        <button id="btnCollapseLeft" class="btn btnMini">⟨</button>
+        <span>テンプレ / モデル</span>
+      </div>
+      <div class="paneBody">
+        <div class="block addCard">
+          <div class="blockTitle">ノード追加</div>
+          <div class="row">
+            <select id="selRole" class="select wide"></select>
+            <button id="btnAddNode" class="btn">追加</button>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="blockTitle">ノード一覧</div>
+          <div id="nodeList" class="list"></div>
+        </div>
+
+        <div class="block addCard">
+          <div class="blockTitle">エッジ追加</div>
+          <div class="row">
+            <select id="selEdgeFrom" class="select"></select>
+            <span class="mono">→</span>
+            <select id="selEdgeTo" class="select"></select>
+          </div>
+          <div class="row">
+            <select id="selEdgeKind" class="select wide"></select>
+            <input id="txtEdgeLabel" class="input wide" placeholder="ラベル（任意）" />
+            <button id="btnAddEdge" class="btn">追加</button>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="blockTitle">エッジ一覧</div>
+          <div id="edgeList" class="list"></div>
+        </div>
+
+        <div class="block addCard">
+          <div class="blockTitle">境界（subgraph）追加</div>
+          <div class="row">
+            <select id="selBoundaryRole" class="select wide"></select>
+            <button id="btnAddBoundary" class="btn">境界追加</button>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="blockTitle">境界一覧</div>
+          <div id="boundaryList" class="list"></div>
+        </div>
+
+        <div class="block">
+          <div class="blockTitle">プロパティ</div>
+          <div id="propPanel" class="props mono">未選択</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="splitter" data-split="left"></div>
+
+    <section class="pane" id="paneCenter">
+      <div class="paneHead">
+        <span>プレビュー</span>
+      </div>
+      <div class="paneBody previewBody" id="previewWrap">
+        <div class="previewZoom">
+          <div class="zoomRow">
+            <button id="btnZoomOut" class="btn btnMini">-</button>
+            <span id="zoomText" class="mono">100%</span>
+            <button id="btnZoomIn" class="btn btnMini">+</button>
+            <button id="btnZoomReset" class="btn btnMini">100%</button>
+            <button id="btnZoomFit" class="btn btnMini">Fit</button>
+          </div>
+          <div class="zoomRow">
+            <button id="btnPanSpeed" class="btn btnMini">Pan x2</button>
+          </div>
+          <div class="panGrid">
+            <div></div>
+            <button id="btnPanUp" class="btn btnMini">^</button>
+            <div></div>
+            <button id="btnPanLeft" class="btn btnMini">&lt;</button>
+            <button id="btnPanReset" class="btn btnMini">Center</button>
+            <button id="btnPanRight" class="btn btnMini">&gt;</button>
+            <div></div>
+            <button id="btnPanDown" class="btn btnMini">v</button>
+            <div></div>
+          </div>
+        </div>
+        <div id="preview" class="preview"></div>
+      </div>
+    </section>
+
+    <div class="splitter" data-split="right"></div>
+
+    <section class="pane" id="paneRight">
+      <div class="paneHead">
+        <button id="btnCollapseRight" class="btn btnMini">⟩</button>
+        <span>Inspector / Mermaid</span>
+      </div>
+      <div class="paneBody">
+        <div class="editorArea">
+          <details id="internalPanel" class="internalPanel hidden">
+            <summary class="internalSummary">Internal blocks</summary>
+            <div class="editorToolbar">
+              <label class="toggle" id="internalToggleWrap">
+                <input type="checkbox" id="toggleInternalBlocks" />
+                Show internal blocks (MODEL/RAW)
+              </label>
+            </div>
+          </details>
+          <div id="srcEditor" class="editor"></div>
+          <textarea id="src" class="editorFallback"></textarea>
+          <div id="inspector" class="inspector inlineInspector">
+            <div class="inspectorHead">
+              <span id="inspectorTitle">Inspector</span>
+              <span id="inspectorBadge" class="badge"></span>
+            </div>
+            <div id="inspectorBody" class="inspectorBody"></div>
+          </div>
+        </div>
+        <div class="hsplitter" data-split="problems"></div>
+        <div class="problems">
+          <div class="problemsHead">
+            <span>Problems</span>
+            <button id="btnToggleProblems" class="btn btnMini">Toggle</button>
+          </div>
+          <div id="problemsList" class="problemsList"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="edgeToggles" class="edgeToggles">
+    <button id="btnExpandLeft" class="btn btnMini edgeBtn left">⟩</button>
+    <button id="btnExpandRight" class="btn btnMini edgeBtn right">⟨</button>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <button id="btnCopyDiagnostics" type="button" hidden aria-hidden="true"></button>
+  <button id="btnRestoreSnapshot" type="button" hidden aria-hidden="true"></button>
+  <div id="ctxMenu" class="contextMenu hidden" role="menu" aria-hidden="true"></div>
+
+  <footer class="footer">
+    <span class="mono" id="fileInfo">未保存</span>
+  </footer>
+
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>
