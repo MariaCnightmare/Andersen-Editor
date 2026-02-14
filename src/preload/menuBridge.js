@@ -37,7 +37,10 @@ const ACTION_TO_DOM_ID = {
   "pane:collapseLeft": "btnCollapseLeft",
   "pane:collapseRight": "btnCollapseRight",
   "pane:expandLeft": "btnExpandLeft",
-  "pane:expandRight": "btnExpandRight"
+  "pane:expandRight": "btnExpandRight",
+
+  // Help
+  "help:copyDiagnostics": "btnCopyDiagnostics"
 };
 
 function onReady(fn) {

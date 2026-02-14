@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld("api", {
   exportModelJson: (args) => ipcRenderer.invoke("export:modelJson", args),
 
   getDiagnostics: () => ipcRenderer.invoke("diag:getInfo"),
+  getGpuStatus: () => ipcRenderer.invoke("diag:getGpuStatus"),
+  copyDiagnostics: () => ipcRenderer.invoke("diag:copyToClipboard"),
   setUiScalePref: (value) => ipcRenderer.invoke("config:setUiScale", value),
   setOzonePref: (value) => ipcRenderer.invoke("config:setOzone", value),
   setUiZoomFactor: (value) => ipcRenderer.invoke("ui:setZoomFactor", value),

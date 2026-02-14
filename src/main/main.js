@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog, screen } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, screen, clipboard } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { installAppMenu, wireMenuStateIpc } = require("./appMenu");
+const { summarizeGpuStatus, summarizeGpuInfo, formatDiagnosticsText } = require("./gpuDiagnostics");
 
 let mainWindow = null;
 
@@ -23,9 +24,10 @@ let diagInfo = {
 };
 
 const isWsl = !!(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
-if (isWsl) {
+const disableGpuByEnv = process.env.AE_DISABLE_GPU === "1";
+if (disableGpuByEnv) {
   app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch("use-gl", "swiftshader");
+  diagInfo.warning = diagInfo.warning || "GPU disabled by AE_DISABLE_GPU=1";
 }
 
 function parseScale(value) {
@@ -89,12 +91,6 @@ if (chosenScale) {
   app.commandLine.appendSwitch("force-device-scale-factor", String(chosenScale));
   diagInfo.forcedScale = chosenScale;
   diagInfo.forcedScaleSource = "env";
-}
-
-if (isWsl) {
-  app.commandLine.appendSwitch("disable-gpu");
-  app.commandLine.appendSwitch("disable-gpu-compositing");
-  diagInfo.warning = diagInfo.warning || "GPU disabled for WSL";
 }
 
 const envOzoneHint = process.env.ELECTRON_OZONE_PLATFORM_HINT;
@@ -249,6 +245,35 @@ function ensureWindow() {
   return mainWindow;
 }
 
+let gpuDiagCache = {
+  collectedAt: 0,
+  summary: null,
+  info: null,
+  featureStatus: null
+};
+
+async function collectGpuDiagnostics(force = false) {
+  const now = Date.now();
+  if (!force && gpuDiagCache.summary && now - gpuDiagCache.collectedAt < 5000) {
+    return gpuDiagCache;
+  }
+  let featureStatus = {};
+  let gpuInfo = {};
+  try {
+    featureStatus = app.getGPUFeatureStatus() || {};
+  } catch {}
+  try {
+    gpuInfo = await app.getGPUInfo("basic");
+  } catch {}
+  gpuDiagCache = {
+    collectedAt: now,
+    featureStatus,
+    summary: summarizeGpuStatus(featureStatus, { disableRequested: disableGpuByEnv }),
+    info: summarizeGpuInfo(gpuInfo)
+  };
+  return gpuDiagCache;
+}
+
 ipcMain.handle("diag:getInfo", async () => {
   try {
     const win = ensureWindow();
@@ -257,7 +282,40 @@ ipcMain.handle("diag:getInfo", async () => {
   try {
     diagInfo.displayScale = screen.getPrimaryDisplay().scaleFactor;
   } catch {}
-  return diagInfo;
+  const gpu = await collectGpuDiagnostics(false);
+  return {
+    ...diagInfo,
+    gpu: {
+      summary: gpu.summary,
+      info: gpu.info
+    }
+  };
+});
+
+ipcMain.handle("diag:getGpuStatus", async () => {
+  const gpu = await collectGpuDiagnostics(true);
+  return {
+    summary: gpu.summary,
+    info: gpu.info
+  };
+});
+
+ipcMain.handle("diag:copyToClipboard", async () => {
+  try {
+    const win = ensureWindow();
+    try {
+      diagInfo.zoomFactor = await win.webContents.getZoomFactor();
+    } catch {}
+    try {
+      diagInfo.displayScale = screen.getPrimaryDisplay().scaleFactor;
+    } catch {}
+    const gpu = await collectGpuDiagnostics(true);
+    const text = formatDiagnosticsText(diagInfo, gpu);
+    clipboard.writeText(text);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || "copy diagnostics failed" };
+  }
 });
 
 ipcMain.handle("config:setUiScale", async (_evt, value) => {

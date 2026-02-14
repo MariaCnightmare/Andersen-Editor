@@ -66,6 +66,7 @@ const els = {
   statusScale: $("statusScale"),
   statusUiScale: $("statusUiScale"),
   statusOzone: $("statusOzone"),
+  statusGpu: $("statusGpu"),
   statusSizes: $("statusSizes"),
   statusWarn: $("statusWarn"),
   fileInfo: $("fileInfo"),
@@ -133,6 +134,7 @@ const els = {
   btnCollapseRight: $("btnCollapseRight"),
   btnExpandLeft: $("btnExpandLeft"),
   btnExpandRight: $("btnExpandRight"),
+  btnCopyDiagnostics: $("btnCopyDiagnostics"),
   newDialog: $("newDialog"),
   btnNewCancel: $("btnNewCancel"),
   btnAddNode: $("btnAddNode"),
@@ -191,6 +193,16 @@ async function updateDiagnostics() {
     }
     if (els.statusOzone) {
       els.statusOzone.textContent = `ozone:${diag.ozoneHint || (diag.ozoneEnabled ? "auto" : "off")}`;
+    }
+    if (els.statusGpu) {
+      const gpu = diag?.gpu?.summary;
+      if (!state.devMode || !gpu) {
+        els.statusGpu.textContent = "";
+      } else if (gpu.enabled) {
+        els.statusGpu.textContent = "GPU: enabled";
+      } else {
+        els.statusGpu.textContent = `GPU: disabled (${gpu.reason || "unknown"})`;
+      }
     }
     if (els.statusWarn) {
       els.statusWarn.textContent = diag.warning ? `warn:${diag.warning}` : "";
@@ -2605,6 +2617,18 @@ function wireToolbar() {
     });
   }
 
+  if (els.btnCopyDiagnostics) {
+    els.btnCopyDiagnostics.addEventListener("click", async () => {
+      if (!window.api?.copyDiagnostics) return;
+      const res = await window.api.copyDiagnostics();
+      if (res?.ok) {
+        showToast("Diagnostics copied");
+      } else {
+        showError(res?.error || "Copy diagnostics failed");
+      }
+    });
+  }
+
   if (els.btnApplyText) {
     els.btnApplyText.addEventListener("click", async () => {
       const text = getEditorBaseText();
@@ -2649,6 +2673,7 @@ function wireToolbar() {
       }
       updateInternalToggleVisibility();
       renderProblems();
+      updateDiagnostics();
     });
   }
 }

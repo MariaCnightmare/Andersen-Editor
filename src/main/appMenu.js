@@ -196,6 +196,10 @@ function installAppMenu(win) {
       label: "ヘルプ",
       submenu: [
         {
+          label: "Copy Diagnostics",
+          click: () => sendAction(win, "help:copyDiagnostics")
+        },
+        {
           label: "プロジェクトページを開く",
           click: async () => {
             await dialog.showMessageBox(win, {
