@@ -53,6 +53,10 @@ function installAppMenu(win) {
           accelerator: "CmdOrCtrl+Shift+S",
           click: () => sendAction(win, "file:saveAs")
         },
+        {
+          label: "履歴から復元…",
+          click: () => sendAction(win, "file:restoreSnapshot")
+        },
         { type: "separator" },
         {
           label: "SVGを書き出し…",
