@@ -1,5 +1,11 @@
 import { embedModelComment } from "./codec.js";
 import { normalizeModel, clone } from "./model.js";
+import {
+  buildNodeClassAssignments,
+  emitClassDefLines,
+  normalizeClassName,
+  normalizeNodeClassName
+} from "./className.mjs";
 
 function sanitizeLabel(s) {
   const t = String(s ?? "");
@@ -41,6 +47,7 @@ function groupBy(arr, keyFn) {
 
 export function generateMermaid(model, pack, theme) {
   const m = normalizeModel(clone(model));
+  m.nodes.forEach((n) => normalizeNodeClassName(n));
 
   const initLine = `%%{init: ${JSON.stringify(theme.init)} }%%`;
   const modelLine = embedModelComment(m);
@@ -78,6 +85,13 @@ export function generateMermaid(model, pack, theme) {
 
   // edges
   const edgeStyleIndices = []; // { idx, className }
+  const edgeStylesByClass = new Map();
+  if (theme.edgeStyles) {
+    for (const [key, style] of Object.entries(theme.edgeStyles)) {
+      const cls = normalizeClassName(key);
+      if (cls) edgeStylesByClass.set(cls, style);
+    }
+  }
   m.edges.forEach((e, idx) => {
     const ek = pack.edgeKinds[e.kind];
     const arrow = ek ? ek.arrow : "-->";
@@ -87,41 +101,33 @@ export function generateMermaid(model, pack, theme) {
     } else {
       lines.push(`  ${e.from} ${arrow} ${e.to}`);
     }
-    if (ek && ek.className && theme.edgeStyles && theme.edgeStyles[ek.className]) {
-      edgeStyleIndices.push({ idx, className: ek.className });
+    const edgeClass = normalizeClassName(ek?.className);
+    if (edgeClass && edgeStylesByClass.has(edgeClass)) {
+      edgeStyleIndices.push({ idx, className: edgeClass });
     }
   });
   if (m.edges.length) lines.push("");
 
   // classDefs
   if (theme.classDefs) {
-    for (const [className, def] of Object.entries(theme.classDefs)) {
-      lines.push(`  classDef ${className} ${def}`);
-    }
+    lines.push(...emitClassDefLines(theme.classDefs));
     lines.push("");
   }
 
   // class assignments (nodes)
-  const classToNodes = new Map();
-  for (const n of m.nodes) {
-    const role = pack.roles[n.role];
-    const cls = n.className || (role ? role.className : null);
-    if (!cls) continue;
-    if (!classToNodes.has(cls)) classToNodes.set(cls, []);
-    classToNodes.get(cls).push(n.id);
-  }
-  for (const [cls, ids] of classToNodes.entries()) {
-    lines.push(`  class ${ids.join(",")} ${cls}`);
-  }
-  if (classToNodes.size) lines.push("");
+  const nodeClassLines = buildNodeClassAssignments(m.nodes, pack.roles);
+  lines.push(...nodeClassLines);
+  if (nodeClassLines.length) lines.push("");
 
   // boundary styles
   if (theme.boundaryStyles) {
     for (const b of m.boundaries) {
       const br = pack.boundaryRoles[b.role];
-      const cls = br ? br.className : null;
+      const cls = normalizeClassName(br ? br.className : null);
       if (!cls) continue;
-      const style = theme.boundaryStyles[cls];
+      const style =
+        theme.boundaryStyles?.[cls] ||
+        theme.boundaryStyles?.[Object.keys(theme.boundaryStyles || {}).find((k) => normalizeClassName(k) === cls)];
       if (style) {
         lines.push(`  style ${b.id} ${style}`);
       }
@@ -131,7 +137,7 @@ export function generateMermaid(model, pack, theme) {
 
   // linkStyle
   for (const it of edgeStyleIndices) {
-    const style = theme.edgeStyles[it.className];
+    const style = edgeStylesByClass.get(it.className);
     lines.push(`  linkStyle ${it.idx} ${style}`);
   }
 

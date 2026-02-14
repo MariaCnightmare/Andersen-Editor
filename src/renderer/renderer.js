@@ -1,4 +1,5 @@
 import { createInitialModel, normalizeModel, clone } from "../core/model.js";
+import { normalizeNodeClassName, slugifyClassName } from "../core/className.mjs";
 import { generateMermaid } from "../core/generateMermaid.js";
 import { extractModelFromText, embedModelComment } from "../core/codec.js";
 import {
@@ -1086,6 +1087,26 @@ function parseMermaidToModel(text) {
     if (!trimmed) continue;
     if (trimmed.startsWith("%%")) continue;
 
+    if (/^classDef\b/i.test(trimmed) || /^class\b/i.test(trimmed)) {
+      if (/^class\[/i.test(trimmed)) {
+        warnings.push({
+          type: "warn",
+          message: "Invalid Mermaid syntax 'class[...]'. Use: class nodeId class_name;",
+          line: lineNo,
+          column: 1
+        });
+      } else if (/^class\s+\S+\s+\S+\s+\S+/i.test(trimmed)) {
+        warnings.push({
+          type: "warn",
+          message: "className contains spaces. Use snake_case (e.g. vpn1_role).",
+          line: lineNo,
+          column: 1
+        });
+      }
+      unsupportedBuffer.push({ text: line, lineNo });
+      continue;
+    }
+
     const mFlow = trimmed.match(/^(flowchart|graph)\s+(\w+)/i);
     if (mFlow) {
       direction = mFlow[2].toUpperCase();
@@ -1134,6 +1155,10 @@ function parseMermaidToModel(text) {
     const mNode = trimmed.match(/^([A-Za-z0-9_\-]+)(\[.*\]|\(\[.*\]\)|\(\(.*\)\)|\[\(.*\)\]|\{\{.*\}\}|\{.*\}|\[\/.*\/\])$/);
     if (mNode) {
       const [, id, raw] = mNode;
+      if (id.toLowerCase() === "class" || id.toLowerCase() === "classdef") {
+        unsupportedBuffer.push({ text: line, lineNo });
+        continue;
+      }
       const shape = detectShape(raw);
       const label = extractLabel(raw);
       makeNode(id, label, shape);
@@ -1166,10 +1191,50 @@ function parseMermaidToModel(text) {
   };
 
   model.rawBlocks = rawBlocks;
+  model.nodes.forEach((n) => normalizeNodeClassName(n));
   return { model, warnings, rawBlocks };
 }
 
+function normalizeModelClassNames(model) {
+  if (!model || !Array.isArray(model.nodes)) return model;
+  model.nodes.forEach((n) => normalizeNodeClassName(n));
+  return model;
+}
+
+function validateMermaidText(text) {
+  const items = [];
+  const lines = String(text || "").split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (/^class\[/i.test(line)) {
+      items.push({
+        type: "error",
+        message: "Invalid Mermaid syntax 'class[...]'. Use: class nodeId class_name;",
+        line: i + 1,
+        column: 1
+      });
+      continue;
+    }
+    const m = line.match(/^class\s+(.+)$/i);
+    if (m) {
+      const parts = m[1].split(/\s+/);
+      const cls = parts.length >= 2 ? parts[parts.length - 1] : "";
+      if (cls && slugifyClassName(cls) !== cls) {
+        items.push({
+          type: "warn",
+          message: `className '${cls}' normalized to '${slugifyClassName(cls)}'`,
+          line: i + 1,
+          column: 1
+        });
+      }
+    }
+  }
+  return items;
+}
+
 function renderFromModel({ preserveWarnings = false } = {}) {
+  state.model = normalizeModelClassNames(state.model);
   state.model = normalizeModel(clone(state.model));
   state.model.direction = els.selDir.value || state.model.direction;
   if (state.selectedNodeId && !state.model.nodes.find((n) => n.id === state.selectedNodeId)) {
@@ -1180,6 +1245,11 @@ function renderFromModel({ preserveWarnings = false } = {}) {
   }
   state.edgeAmbiguous = null;
   const mermaidText = generateMermaid(state.model, state.pack, state.theme);
+  const validation = validateMermaidText(mermaidText).filter((x) => x.type === "error");
+  if (validation.length) {
+    setProblems(validation, { status: "error", open: true });
+    return;
+  }
   const fullText = `${mermaidText}\n${buildInternalBlocksText(state.model.rawBlocks || [])}\n`;
   const displayText = state.showInternalBlocks ? fullText : stripInternalBlocks(fullText);
   updateEditorText(displayText);
@@ -1207,6 +1277,7 @@ function renderFromText({ live = false } = {}) {
 
   const embedded = extractModelFromText(text);
   if (embedded) {
+    normalizeModelClassNames(embedded);
     state.model = embedded;
     state.textDirty = false;
     updateApplyButton();
@@ -1221,6 +1292,7 @@ function renderFromText({ live = false } = {}) {
   }
 
   state.model = model;
+  normalizeModelClassNames(state.model);
   if (!state.showInternalBlocks && (!state.model.rawBlocks || state.model.rawBlocks.length === 0) && state.prevRawBlocks?.length) {
     state.model.rawBlocks = state.prevRawBlocks;
   }

@@ -10,6 +10,12 @@ import {
   resolveUiZoomFactor,
   stripInternalBlocks
 } from "../src/renderer/editorUtils.mjs";
+import {
+  buildNodeClassAssignments,
+  emitClassDefLines,
+  normalizeNodeClassName,
+  slugifyClassName
+} from "../src/core/className.mjs";
 
 test("save_text_mode_dirty_embedded_model_consistency", async () => {
   let committed = false;
@@ -71,4 +77,27 @@ test("ui_scale_choices_and_auto_resolution", () => {
   assert.equal(resolveUiZoomFactor("auto", { devicePixelRatio: 1, displayScale: 1 }), 1);
   assert.equal(resolveUiZoomFactor("auto", { devicePixelRatio: 1.5, displayScale: 1.5 }), 0.9);
   assert.equal(computeAutoUiZoomFactor({ devicePixelRatio: 2, displayScale: 2 }), 0.9);
+});
+
+test("class_name_slugify_no_space", () => {
+  assert.equal(slugifyClassName("VPN1 role"), "vpn1_role");
+});
+
+test("render_does_not_emit_class_bracket_syntax", () => {
+  const defs = emitClassDefLines({ "VPN1 role": "fill:#fff,stroke:#333" });
+  const classes = buildNodeClassAssignments(
+    [{ id: "VPN1", role: "vpn_gateway", className: "VPN1 role" }],
+    { vpn_gateway: { className: "VPN1 role" } }
+  );
+  const all = [...defs, ...classes].join("\n");
+  assert.doesNotMatch(all, /class\[/);
+  assert.match(all, /classDef vpn1_role /);
+  assert.match(all, /class VPN1 vpn1_role;/);
+});
+
+test("roundtrip_preserves_display_name", () => {
+  const node = { id: "VPN1", className: "VPN1 role" };
+  normalizeNodeClassName(node);
+  assert.equal(node.classDisplayName, "VPN1 role");
+  assert.equal(node.className, "vpn1_role");
 });
