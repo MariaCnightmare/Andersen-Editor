@@ -513,6 +513,11 @@ body.dragging {
 }
 
 #previewWrap {
+  position: relative;
+  cursor: default;
+}
+
+#previewWrap.hand-cursor {
   cursor: grab;
 }
 
@@ -530,9 +535,9 @@ body.connect-mode #previewWrap {
 }
 
 .previewZoom {
-  position: sticky;
-  top: 0;
-  left: 0;
+  position: absolute;
+  top: 8px;
+  left: 8px;
   z-index: 5;
   display: inline-flex;
   flex-direction: column;
@@ -542,7 +547,7 @@ body.connect-mode #previewWrap {
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: rgba(13, 20, 30, 0.95);
-  margin-bottom: 6px;
+  margin-bottom: 0;
   align-self: flex-start;
 }
 
@@ -920,4 +925,3 @@ body.printing #paneCenter {
 body.printing .previewBody {
   padding: 0 !important;
 }
-
