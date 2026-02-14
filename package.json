@@ -1,0 +1,41 @@
+{
+  "name": "andersen-editor",
+  "version": "0.1.0",
+  "description": "Mermaid + 図形編集（Hybrid Infra Pack）",
+  "main": "src/main/main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron .",
+    "dist": "electron-builder --linux",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "codemirror": "^5.65.16",
+    "electron": "^31.3.1",
+    "mermaid": "^10.9.1"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "jp.apiron.andersen.editor",
+    "productName": "Andersen Editor",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**",
+      "templates/**",
+      "docs/**",
+      "package.json",
+      "node_modules/**"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development"
+    }
+  }
+}

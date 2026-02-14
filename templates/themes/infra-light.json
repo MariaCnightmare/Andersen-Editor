@@ -1,0 +1,39 @@
+{
+  "themeId": "infra-light",
+  "name": "Infra Light",
+  "init": {
+    "theme": "default",
+    "flowchart": {
+      "curve": "basis"
+    }
+  },
+  "classDefs": {
+    "role-client": "fill:#e9f1ff,stroke:#245bdb,stroke-width:2px,color:#121826",
+    "role-internet": "fill:#f2e9ff,stroke:#6b3fd6,stroke-width:2px,color:#121826",
+    "role-server": "fill:#eef2ff,stroke:#245bdb,stroke-width:2px,color:#121826",
+    "role-app": "fill:#e9fff2,stroke:#0a8a53,stroke-width:2px,color:#121826",
+    "role-lb": "fill:#fff6e3,stroke:#b07b00,stroke-width:2px,color:#121826",
+    "role-db": "fill:#f4edff,stroke:#6b3fd6,stroke-width:2px,color:#121826",
+    "role-vpn": "fill:#fff3e9,stroke:#b07b00,stroke-width:2px,color:#121826",
+    "role-fw": "fill:#ffe9e9,stroke:#d33a3a,stroke-width:2px,color:#121826",
+    "role-router": "fill:#f0ffe9,stroke:#3d8a0a,stroke-width:2px,color:#121826",
+    "role-external": "fill:#ffffff,stroke:#5a657a,stroke-width:2px,color:#121826",
+    "accent-blue": "fill:#e8f4ff,stroke:#245bdb,stroke-width:2px,color:#121826",
+    "accent-green": "fill:#e9fff2,stroke:#0a8a53,stroke-width:2px,color:#121826",
+    "accent-amber": "fill:#fff6e3,stroke:#b07b00,stroke-width:2px,color:#121826",
+    "accent-red": "fill:#ffe9e9,stroke:#d33a3a,stroke-width:2px,color:#121826"
+  },
+  "boundaryStyles": {
+    "boundary-onprem": "fill:transparent,stroke:#5a657a,stroke-width:1px,stroke-dasharray:4 4,color:#5a657a",
+    "boundary-vpc": "fill:transparent,stroke:#245bdb,stroke-width:1px,stroke-dasharray:4 4,color:#245bdb",
+    "boundary-subnet": "fill:transparent,stroke:#0a8a53,stroke-width:1px,stroke-dasharray:4 4,color:#0a8a53",
+    "boundary-dmz": "fill:transparent,stroke:#b07b00,stroke-width:1px,stroke-dasharray:4 4,color:#b07b00"
+  },
+  "edgeStyles": {
+    "edge-http": "stroke:#245bdb,stroke-width:2px",
+    "edge-sql": "stroke:#6b3fd6,stroke-width:2px",
+    "edge-dep": "stroke:#5a657a,stroke-width:2px,stroke-dasharray:4 4",
+    "edge-opt": "stroke:#5a657a,stroke-width:1px,stroke-dasharray:2 6",
+    "edge-tunnel": "stroke:#b07b00,stroke-width:4px,stroke-dasharray:6 4"
+  }
+}

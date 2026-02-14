@@ -1,0 +1,118 @@
+{
+  "packId": "hybrid-infra",
+  "name": "Hybrid Infra Pack",
+  "diagramType": "flowchart",
+  "defaultDirection": "LR",
+  "roles": {
+    "client": {
+      "label": "Client",
+      "idPrefix": "CL",
+      "shape": "round",
+      "className": "role-client"
+    },
+    "internet": {
+      "label": "Internet",
+      "idPrefix": "NET",
+      "shape": "circle",
+      "className": "role-internet"
+    },
+    "server": {
+      "label": "Server",
+      "idPrefix": "SV",
+      "shape": "rect",
+      "className": "role-server"
+    },
+    "app": {
+      "label": "AP",
+      "idPrefix": "AP",
+      "shape": "round",
+      "className": "role-app"
+    },
+    "lb": {
+      "label": "LB",
+      "idPrefix": "LB",
+      "shape": "rect",
+      "className": "role-lb"
+    },
+    "db": {
+      "label": "DB",
+      "idPrefix": "DB",
+      "shape": "cylinder",
+      "className": "role-db"
+    },
+    "vpn_gateway": {
+      "label": "VPN GW",
+      "idPrefix": "VPN",
+      "shape": "hex",
+      "className": "role-vpn"
+    },
+    "firewall": {
+      "label": "FW",
+      "idPrefix": "FW",
+      "shape": "rect",
+      "className": "role-fw"
+    },
+    "router": {
+      "label": "Router",
+      "idPrefix": "RT",
+      "shape": "hex",
+      "className": "role-router"
+    },
+    "external_service": {
+      "label": "External",
+      "idPrefix": "EXT",
+      "shape": "parallelogram",
+      "className": "role-external"
+    }
+  },
+  "edgeKinds": {
+    "http": {
+      "label": "HTTP/HTTPS",
+      "arrow": "-->",
+      "defaultLabel": "HTTPS",
+      "className": "edge-http"
+    },
+    "sql": {
+      "label": "SQL",
+      "arrow": "-->",
+      "defaultLabel": "SQL",
+      "className": "edge-sql"
+    },
+    "dependency": {
+      "label": "Dependency",
+      "arrow": "-.->",
+      "defaultLabel": "",
+      "className": "edge-dep"
+    },
+    "optional": {
+      "label": "Optional",
+      "arrow": "-.->",
+      "defaultLabel": "optional",
+      "className": "edge-opt"
+    },
+    "tunnel": {
+      "label": "VPN Tunnel",
+      "arrow": "==>",
+      "defaultLabel": "IPsec",
+      "className": "edge-tunnel"
+    }
+  },
+  "boundaryRoles": {
+    "onprem": {
+      "label": "On-Prem",
+      "className": "boundary-onprem"
+    },
+    "vpc": {
+      "label": "VPC",
+      "className": "boundary-vpc"
+    },
+    "subnet": {
+      "label": "Subnet",
+      "className": "boundary-subnet"
+    },
+    "dmz": {
+      "label": "DMZ",
+      "className": "boundary-dmz"
+    }
+  }
+}
