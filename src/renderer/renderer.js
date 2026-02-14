@@ -26,7 +26,6 @@ const state = {
   themes: [],
   theme: null,
   model: null,
-  mode: "model",
   filePath: null,
   editor: null,
   lastSvgText: "",
@@ -51,7 +50,11 @@ const state = {
   devMode: false,
   connectMode: false,
   prevRawBlocks: null,
-  mermaid: null
+  mermaid: null,
+  syncRev: 0,
+  outOfSync: false,
+  docHistory: [],
+  docHistoryMax: 30
 };
 
 const els = {
@@ -135,6 +138,7 @@ const els = {
   btnExpandLeft: $("btnExpandLeft"),
   btnExpandRight: $("btnExpandRight"),
   btnCopyDiagnostics: $("btnCopyDiagnostics"),
+  btnRestoreSnapshot: $("btnRestoreSnapshot"),
   newDialog: $("newDialog"),
   btnNewCancel: $("btnNewCancel"),
   btnAddNode: $("btnAddNode"),
@@ -239,6 +243,26 @@ function setStatusReason(text) {
   if (els.statusWrap) els.statusWrap.title = text || "";
 }
 
+function bumpSyncRev() {
+  state.syncRev += 1;
+  return state.syncRev;
+}
+
+function isLatestRev(rev) {
+  return rev === state.syncRev;
+}
+
+function setOutOfSync(flag, reason = "") {
+  state.outOfSync = !!flag;
+  if (state.outOfSync) {
+    setStatus("warn", "out-of-sync");
+    setStatusReason(reason || "Text has syntax errors. Fix and Apply.");
+  } else if (!state.problems.length) {
+    setStatus("ok", "ready");
+    setStatusReason("");
+  }
+}
+
 function showError(err) {
   const msg = err?.message ? String(err.message) : String(err || "Unknown error");
   setProblems([{ type: "error", message: msg }], { status: "error", open: true });
@@ -255,10 +279,8 @@ function setFileInfo() {
 }
 
 function markModelDirty(reason = "model changed") {
-  if (state.mode !== "text") {
-    setStatus("dirty", "dirty");
-    setStatusReason(reason);
-  }
+  setStatus("dirty", "dirty");
+  setStatusReason(reason);
 }
 
 function clamp(val, min, max) {
@@ -664,6 +686,36 @@ function getFullSourceForOutput() {
   return parts.join("\n") + "\n";
 }
 
+function loadDocHistory() {
+  try {
+    const raw = localStorage.getItem("ae:docHistory");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    state.docHistory = parsed.filter((x) => x && typeof x.content === "string").slice(0, state.docHistoryMax);
+  } catch {
+    state.docHistory = [];
+  }
+}
+
+function saveDocHistory() {
+  try {
+    localStorage.setItem("ae:docHistory", JSON.stringify(state.docHistory.slice(0, state.docHistoryMax)));
+  } catch {}
+}
+
+function addDocSnapshot(reason) {
+  const content = getFullSourceForOutput();
+  const item = {
+    ts: Date.now(),
+    reason: reason || "manual",
+    content
+  };
+  state.docHistory.unshift(item);
+  state.docHistory = state.docHistory.slice(0, state.docHistoryMax);
+  saveDocHistory();
+}
+
 function formatMermaid(text) {
   const lines = String(text || "").split(/\r?\n/);
   const out = [];
@@ -812,12 +864,11 @@ async function initEditor() {
 
   const onChange = debounce(() => {
     if (state.syncingEditor) return;
-    if (state.mode === "text") {
-      state.textDirty = true;
-      updateApplyButton();
-      setStatus("dirty", "dirty");
-      renderFromText({ live: true });
-    }
+    state.textDirty = true;
+    updateApplyButton();
+    setStatus("dirty", "dirty");
+    setStatusReason("Source edited");
+    void renderFromText({ live: true });
   }, 300);
 
   state.editor.onChange(onChange);
@@ -832,18 +883,42 @@ function debounce(fn, ms) {
 }
 
 function updateEditorText(text) {
+  let cmCursor = null;
+  let cmScroll = null;
+  let taSel = null;
+  let taScroll = null;
+  if (state.editor?.cm) {
+    cmCursor = state.editor.cm.getCursor();
+    cmScroll = state.editor.cm.getScrollInfo();
+  } else if (els.srcTextarea) {
+    taSel = [els.srcTextarea.selectionStart || 0, els.srcTextarea.selectionEnd || 0];
+    taScroll = [els.srcTextarea.scrollTop || 0, els.srcTextarea.scrollLeft || 0];
+  }
   state.syncingEditor = true;
   state.editor.setValue(text);
   state.syncingEditor = false;
+  if (state.editor?.cm && cmCursor && cmScroll) {
+    state.editor.cm.setCursor(cmCursor);
+    state.editor.cm.scrollTo(cmScroll.left, cmScroll.top);
+  } else if (els.srcTextarea && taSel) {
+    const max = els.srcTextarea.value.length;
+    const start = Math.min(taSel[0], max);
+    const end = Math.min(taSel[1], max);
+    els.srcTextarea.setSelectionRange(start, end);
+    if (taScroll) {
+      els.srcTextarea.scrollTop = taScroll[0];
+      els.srcTextarea.scrollLeft = taScroll[1];
+    }
+  }
 }
 
 function syncEditorReadOnly() {
-  state.editor.setReadOnly(state.mode === "model" ? "nocursor" : false);
+  state.editor.setReadOnly(false);
 }
 
 function updateApplyButton() {
   if (!els.btnApplyText) return;
-  els.btnApplyText.style.display = state.mode === "text" ? "inline-flex" : "none";
+  els.btnApplyText.style.display = "inline-flex";
   els.btnApplyText.disabled = !state.textDirty;
   els.btnApplyText.classList.toggle("dirty", state.textDirty);
   if (state.textDirty) {
@@ -1299,6 +1374,7 @@ function validateMermaidText(text) {
 }
 
 function renderFromModel({ preserveWarnings = false } = {}) {
+  const rev = bumpSyncRev();
   state.model = normalizeModelClassNames(state.model);
   state.model = normalizeModel(clone(state.model));
   state.model.direction = els.selDir.value || state.model.direction;
@@ -1321,8 +1397,9 @@ function renderFromModel({ preserveWarnings = false } = {}) {
   updateInternalToggleVisibility();
   renderLists();
   renderPropPanel();
-  renderMermaid(mermaidText);
+  renderMermaid(mermaidText, { expectedRev: rev });
   state.textDirty = false;
+  setOutOfSync(false);
   if (!preserveWarnings) state.parseWarnings = [];
   if (!preserveWarnings) {
     state.problems = [];
@@ -1331,11 +1408,18 @@ function renderFromModel({ preserveWarnings = false } = {}) {
   updateApplyButton();
 }
 
-function renderFromText({ live = false } = {}) {
+async function renderFromText({ live = false } = {}) {
   const text = getEditorBaseText();
-  if (live) {
-    renderMermaid(text);
-    return true;
+  const rev = bumpSyncRev();
+
+  const validation = await validateMermaidSyntax(text);
+  if (!isLatestRev(rev)) return false;
+  if (!validation.ok) {
+    setProblems([validation.problem], { status: "error", open: true });
+    state.textDirty = true;
+    updateApplyButton();
+    setOutOfSync(true, "Mermaid syntax error");
+    return false;
   }
 
   state.prevRawBlocks = state.model?.rawBlocks ? [...state.model.rawBlocks] : [];
@@ -1344,15 +1428,24 @@ function renderFromText({ live = false } = {}) {
   if (embedded) {
     normalizeModelClassNames(embedded);
     state.model = embedded;
+    renderLists();
+    renderPropPanel();
+    updateInternalToggleVisibility();
+    await renderMermaid(text, { expectedRev: rev });
+    if (!isLatestRev(rev)) return false;
     state.textDirty = false;
     updateApplyButton();
-    renderFromModel();
+    setOutOfSync(false);
+    if (!live) pushHistory();
     return true;
   }
 
   const { model, warnings, rawBlocks } = parseMermaidToModel(text);
   if (!model) {
     setProblems(warnings.length ? warnings : [{ type: "error", message: "Parse failed" }], { status: "error", open: true });
+    state.textDirty = true;
+    updateApplyButton();
+    setOutOfSync(true, "Mermaid->Model parse failed");
     return false;
   }
 
@@ -1362,22 +1455,26 @@ function renderFromText({ live = false } = {}) {
     state.model.rawBlocks = state.prevRawBlocks;
   }
   els.selDir.value = model.direction || els.selDir.value;
-  state.textDirty = false;
-  updateApplyButton();
   state.parseWarnings = warnings;
   const rawInfo =
     rawBlocks && rawBlocks.length
       ? [{ type: "warn", message: `RAW preserved: ${rawBlocks.length} block(s)` }]
       : [];
-  setProblems([...rawInfo, ...warnings], { status: warnings.length ? "warn" : "ok", open: warnings.length > 0 });
-  updateInternalToggleVisibility();
-  pushHistory();
-  if (warnings.length) {
-    renderFromModel({ preserveWarnings: true });
+  const mergedProblems = [...rawInfo, ...warnings];
+  if (mergedProblems.length) {
+    setProblems(mergedProblems, { status: warnings.length ? "warn" : "ok", open: warnings.length > 0 });
   } else {
     clearError();
-    renderFromModel();
   }
+  updateInternalToggleVisibility();
+  renderLists();
+  renderPropPanel();
+  await renderMermaid(text, { expectedRev: rev });
+  if (!isLatestRev(rev)) return false;
+  state.textDirty = false;
+  updateApplyButton();
+  setOutOfSync(warnings.length > 0, warnings.length ? "Source contains unsupported lines (RAW preserved)" : "");
+  if (!live) pushHistory();
   return true;
 }
 
@@ -1946,7 +2043,7 @@ function selectEdgeById(id) {
 function attachNodeInteractions(svg) {
   const nodes = svg.querySelectorAll("g.node");
   for (const g of nodes) {
-    g.style.cursor = "pointer";
+    g.style.cursor = "default";
     g.addEventListener("mouseover", (evt) => {
       const id = getNodeIdFromElement(evt.target);
       if (!id) return;
@@ -2043,7 +2140,7 @@ function attachNodeInteractions(svg) {
     } else {
       g.dataset.aeEdgeAmbiguous = "1";
     }
-    g.style.cursor = "pointer";
+    g.style.cursor = "default";
     g.addEventListener("mouseover", () => {
       if (g.dataset.aeEdgeId) {
         state.edgeAmbiguous = null;
@@ -2177,9 +2274,9 @@ function attachNodeInteractions(svg) {
   });
 }
 
-async function renderMermaid(text) {
+async function renderMermaid(text, { expectedRev = null } = {}) {
   const seq = ++state.renderSeq;
-  clearError({ preserveStatus: (state.mode === "text" && state.textDirty) || state.parseWarnings.length > 0 });
+  clearError({ preserveStatus: state.textDirty || state.parseWarnings.length > 0 || state.outOfSync });
 
   const container = els.preview;
 
@@ -2187,6 +2284,7 @@ async function renderMermaid(text) {
     const mermaid = await getMermaid();
     if (!mermaid) throw new Error("Mermaid module not found");
     const result = await mermaid.render(`mmd-${seq}`, text);
+    if (expectedRev !== null && !isLatestRev(expectedRev)) return;
     const svgText = result.svg || result;
     container.innerHTML = svgText;
 
@@ -2214,11 +2312,12 @@ async function renderMermaid(text) {
     applyConnectHandles(svgEl);
     applySelection(svgEl);
     state.lastSvgText = svgEl.outerHTML;
-    if (!(state.mode === "text" && state.textDirty) && state.parseWarnings.length === 0) {
+    if (!state.textDirty && state.parseWarnings.length === 0 && !state.outOfSync) {
       setStatus("ok", "ready");
     }
   } catch (err) {
     if (seq !== state.renderSeq) return;
+    if (expectedRev !== null && !isLatestRev(expectedRev)) return;
     if (state.lastSvgText) {
       container.innerHTML = state.lastSvgText;
     }
@@ -2230,9 +2329,13 @@ async function renderMermaid(text) {
 function wireToolbar() {
   const preparePersistContent = async () => {
     const prep = await prepareContentForSave({
-      mode: state.mode,
+      mode: "text",
       textDirty: state.textDirty,
-      commit: () => renderFromText({ live: false }),
+      commit: async () => {
+        const ok = await renderFromText({ live: false });
+        if (ok) addDocSnapshot("apply-before-save");
+        return ok;
+      },
       buildContent: () => getFullSourceForOutput()
     });
     if (!prep.ok) {
@@ -2260,19 +2363,13 @@ function wireToolbar() {
     updateApplyButton();
     const embedded = extractModelFromText(res.content || "");
     if (embedded) state.model = embedded;
-    if (state.mode === "model" && embedded) {
+    if (embedded) {
       pushHistory();
       renderFromModel();
       return;
     }
-    if (state.mode === "model" && !embedded) {
-      state.mode = "text";
-      els.selMode.value = "text";
-      syncEditorReadOnly();
-      updateApplyButton();
-      showWarning("AE:MODEL not found. Text mode only.");
-    }
-    renderFromText({ live: true });
+    showWarning("AE:MODEL not found. Parsing Mermaid source.");
+    await renderFromText({ live: false });
   });
 
   els.btnSaveAs.addEventListener("click", async () => {
@@ -2313,7 +2410,7 @@ function wireToolbar() {
       updateEditorText(displayText);
       state.textDirty = true;
       updateApplyButton();
-      if (state.mode === "text") renderFromText({ live: true });
+      await renderFromText({ live: true });
     } catch (err) {
       showError(err);
     }
@@ -2343,7 +2440,7 @@ function wireToolbar() {
   });
 
   els.btnUndo.addEventListener("click", () => {
-    if (state.mode === "text") {
+    if (isEditableTarget(document.activeElement) || document.activeElement === els.srcTextarea) {
       state.editor.undo();
     } else {
       undoModel();
@@ -2351,7 +2448,7 @@ function wireToolbar() {
   });
 
   els.btnRedo.addEventListener("click", () => {
-    if (state.mode === "text") {
+    if (isEditableTarget(document.activeElement) || document.activeElement === els.srcTextarea) {
       state.editor.redo();
     } else {
       redoModel();
@@ -2363,7 +2460,7 @@ function wireToolbar() {
     updateEditorText(formatted);
     state.textDirty = true;
     updateApplyButton();
-    if (state.mode === "text") renderFromText({ live: true });
+    void renderFromText({ live: true });
   });
 
   els.btnRelayout.addEventListener("click", () => {
@@ -2383,6 +2480,7 @@ function wireToolbar() {
       const mermaidText = getFullSourceForOutput();
       const defaultFilePath = state.filePath ? state.filePath.replace(/\.[^.]+$/, ".mmd") : "diagram.mmd";
       const res = await window.api.exportMermaid({ mermaidText, defaultFilePath });
+      if (res.ok) addDocSnapshot("export-mermaid");
       if (!res.ok && !res.canceled) showError(res.error || "Mermaid export failed");
     });
   }
@@ -2391,6 +2489,7 @@ function wireToolbar() {
     const svgText = getSvgText();
     if (!svgText) return showError("SVGがありません");
     const res = await window.api.exportSvg({ svgText, defaultFilePath: state.filePath });
+    if (res.ok) addDocSnapshot("export-svg");
     if (!res.ok && !res.canceled) showError(res.error || "SVG export failed");
   });
 
@@ -2400,6 +2499,7 @@ function wireToolbar() {
     try {
       const pngBase64 = await svgToPng(svgText);
       const res = await window.api.exportPng({ pngBase64, defaultFilePath: state.filePath });
+      if (res.ok) addDocSnapshot("export-png");
       if (!res.ok && !res.canceled) showError(res.error || "PNG export failed");
     } catch (err) {
       showError(err);
@@ -2408,6 +2508,7 @@ function wireToolbar() {
 
   els.btnExportPdf.addEventListener("click", async () => {
     const res = await window.api.exportPdf({ defaultFilePath: state.filePath });
+    if (res.ok) addDocSnapshot("export-pdf");
     if (!res.ok && !res.canceled) showError(res.error || "PDF export failed");
   });
 
@@ -2419,6 +2520,7 @@ function wireToolbar() {
           ? state.filePath.replace(/\.[^.]+$/, ".model.json")
           : "diagram.model.json";
         const res = await window.api.exportModelJson({ modelJson, defaultFilePath });
+        if (res.ok) addDocSnapshot("export-model-json");
         if (!res.ok && !res.canceled) showError(res.error || "MODEL export failed");
       } catch (err) {
         showError(err);
@@ -2548,36 +2650,20 @@ function wireToolbar() {
     state.theme = theme;
     initMermaidBase(theme).catch(showError);
     if (state.model) state.model.themeId = themeId;
-    if (state.mode === "model") renderFromModel();
+    renderFromModel();
   });
 
   els.selDir.addEventListener("change", () => {
-    if (state.mode === "model") renderFromModel();
+    renderFromModel();
   });
 
-  els.selMode.addEventListener("change", () => {
-    state.mode = els.selMode.value;
-    syncEditorReadOnly();
-    updateApplyButton();
-    if (state.mode === "model") {
-      if (state.textDirty) {
-        const ok = renderFromText({ live: false });
-        if (!ok) {
-          state.mode = "text";
-          els.selMode.value = "text";
-          syncEditorReadOnly();
-          updateApplyButton();
-          return;
-        }
-      } else {
-        const embedded = extractModelFromText(state.editor.getValue());
-        if (embedded) state.model = embedded;
-        renderFromModel();
-      }
-    } else {
-      renderFromText({ live: true });
+  if (els.selMode) {
+    const modeLabel = els.selMode.previousElementSibling;
+    if (modeLabel && modeLabel.classList.contains("lbl")) {
+      modeLabel.style.display = "none";
     }
-  });
+    els.selMode.style.display = "none";
+  }
 
   if (els.selUiScale) {
     els.selUiScale.addEventListener("change", async () => {
@@ -2631,26 +2717,17 @@ function wireToolbar() {
 
   if (els.btnApplyText) {
     els.btnApplyText.addEventListener("click", async () => {
-      const text = getEditorBaseText();
-      const validation = await validateMermaidSyntax(text);
-      if (!validation.ok) {
-        setProblems([validation.problem], { status: "error", open: true });
-        return;
-      }
-      renderFromText({ live: false });
+      const ok = await renderFromText({ live: false });
+      if (ok) addDocSnapshot("apply");
     });
   }
 
   if (els.toggleInternalBlocks) {
     els.toggleInternalBlocks.addEventListener("change", () => {
       state.showInternalBlocks = els.toggleInternalBlocks.checked;
-      if (state.mode === "model") {
-        renderFromModel();
-      } else {
-        const current = getEditorBaseText();
-        const next = state.showInternalBlocks ? getFullSourceForOutput() : stripInternalBlocks(current);
-        updateEditorText(next);
-      }
+      const current = getEditorBaseText();
+      const next = state.showInternalBlocks ? getFullSourceForOutput() : stripInternalBlocks(current);
+      updateEditorText(next);
       updateInternalToggleVisibility();
     });
   }
@@ -2676,11 +2753,46 @@ function wireToolbar() {
       updateDiagnostics();
     });
   }
+
+  if (els.btnRestoreSnapshot) {
+    els.btnRestoreSnapshot.addEventListener("click", async () => {
+      if (!state.docHistory.length) {
+        showWarning("復元できる履歴がありません。");
+        return;
+      }
+      const choices = state.docHistory
+        .slice(0, 10)
+        .map((h, i) => {
+          const d = new Date(h.ts || Date.now());
+          return `${i + 1}: ${d.toLocaleString()} (${h.reason || "snapshot"})`;
+        })
+        .join("\n");
+      const picked = window.prompt(`復元する履歴番号を入力してください:\n${choices}`, "1");
+      const idx = Number.parseInt(picked || "", 10) - 1;
+      if (!Number.isInteger(idx) || idx < 0 || idx >= state.docHistory.length) return;
+      const item = state.docHistory[idx];
+      updateEditorText(state.showInternalBlocks ? item.content : stripInternalBlocks(item.content));
+      state.textDirty = true;
+      updateApplyButton();
+      await renderFromText({ live: false });
+    });
+  }
 }
 
 function wirePreviewZoom() {
   const wrap = $("previewWrap");
   if (!wrap) return;
+  const updatePanCursor = (target) => {
+    if (document.body.classList.contains("connect-mode")) {
+      wrap.classList.remove("hand-cursor");
+      return;
+    }
+    const onUi = target?.closest?.(".previewZoom");
+    const onInteractive = target?.closest?.("g.node, g.edgePath, g.edgeLabel, circle.ae-handle");
+    const inSvg = !!target?.closest?.("svg");
+    wrap.classList.toggle("hand-cursor", inSvg && !onUi && !onInteractive);
+  };
+
   let isPanning = false;
   let startX = 0;
   let startY = 0;
@@ -2702,6 +2814,15 @@ function wirePreviewZoom() {
     startPanY = state.panY;
   });
 
+  wrap.addEventListener("mousemove", (evt) => {
+    if (isPanning) return;
+    updatePanCursor(evt.target);
+  });
+
+  wrap.addEventListener("mouseleave", () => {
+    if (!isPanning) wrap.classList.remove("hand-cursor");
+  });
+
   window.addEventListener("mousemove", (evt) => {
     if (!isPanning) return;
     const speed = state.panSpeed || 1;
@@ -2716,6 +2837,7 @@ function wirePreviewZoom() {
     if (!isPanning) return;
     isPanning = false;
     wrap.classList.remove("panning");
+    updatePanCursor(evt.target);
   });
 
   wrap.addEventListener(
@@ -2846,14 +2968,14 @@ function wireKeys() {
     if ((evt.metaKey || evt.ctrlKey) && key === "z") {
       evt.preventDefault();
       if (evt.shiftKey) {
-        state.mode === "text" ? state.editor.redo() : redoModel();
+        redoModel();
       } else {
-        state.mode === "text" ? state.editor.undo() : undoModel();
+        undoModel();
       }
     }
     if ((evt.metaKey || evt.ctrlKey) && key === "y") {
       evt.preventDefault();
-      state.mode === "text" ? state.editor.redo() : redoModel();
+      redoModel();
     }
     if ((evt.metaKey || evt.ctrlKey) && key === "k") {
       evt.preventDefault();
@@ -2868,9 +2990,7 @@ function wireKeys() {
       highlightList();
     }
     if (key === "delete" || key === "backspace") {
-      if (state.mode === "model") {
-        deleteSelected();
-      }
+      deleteSelected();
     }
     if (key === "tab") {
       evt.preventDefault();
@@ -2916,10 +3036,7 @@ function wireNewDialog() {
         renderFromModel();
       } else {
         updateEditorText(text);
-        state.mode = "model";
-        els.selMode.value = "model";
-        syncEditorReadOnly();
-        renderFromText({ live: false });
+        void renderFromText({ live: false });
       }
       state.filePath = null;
       setFileInfo();
@@ -3042,6 +3159,7 @@ async function boot() {
   loadPaneSizes();
   loadCollapseState();
   loadProblemsState();
+  loadDocHistory();
   const savedZoom = parseFloat(localStorage.getItem("ae:zoom") || "1");
   const savedPanX = parseFloat(localStorage.getItem("ae:panX") || "0");
   const savedPanY = parseFloat(localStorage.getItem("ae:panY") || "0");
@@ -3068,7 +3186,6 @@ async function boot() {
     document.documentElement.style.setProperty("--problems-h", savedProblemsH);
   }
   await initEditor();
-  state.mode = els.selMode.value || state.mode;
   refreshSelectors();
   syncEditorReadOnly();
   updateApplyButton();
@@ -3105,14 +3222,11 @@ async function boot() {
   if (!localStorage.getItem(firstRunKey)) {
     const sample = buildSampleMermaid();
     updateEditorText(sample);
-    state.mode = "model";
-    els.selMode.value = "model";
-    syncEditorReadOnly();
     state.zoom = 1;
     state.panX = 0;
     state.panY = 0;
     applyZoom();
-    renderFromText({ live: false });
+    await renderFromText({ live: false });
     localStorage.setItem(firstRunKey, "1");
   } else {
     try {
@@ -3123,10 +3237,7 @@ async function boot() {
       showWarning("Startup model restore failed. Loaded sample instead.");
       const sample = buildSampleMermaid();
       updateEditorText(sample);
-      state.mode = "model";
-      els.selMode.value = "model";
-      syncEditorReadOnly();
-      renderFromText({ live: false });
+      await renderFromText({ live: false });
     }
   }
 }
@@ -3144,10 +3255,8 @@ boot().catch((err) => {
     }
     const sample = buildSampleMermaid();
     updateEditorText(sample);
-    state.mode = "model";
-    if (els.selMode) els.selMode.value = "model";
     syncEditorReadOnly();
-    renderFromText({ live: false });
+    void renderFromText({ live: false });
   } catch (fallbackErr) {
     console.error("[boot] fallback failed:", fallbackErr);
   }
