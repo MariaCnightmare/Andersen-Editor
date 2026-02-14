@@ -2388,9 +2388,7 @@ function attachNodeInteractions(svg) {
   });
 
   let dragNode = null;
-  let startX = 0;
-  let startY = 0;
-  let startPos = { x: 0, y: 0 };
+  const DRAG_THRESHOLD_PX = 4;
 
   let connectDrag = null;
 
@@ -2423,17 +2421,23 @@ function attachNodeInteractions(svg) {
     const id = getNodeIdFromElement(g);
     const node = state.model.nodes.find((n) => n.id === id);
     if (!node) return;
-    devLog("drag:start", {
-      nodeId: id,
-      pinnedOffset: getPinnedOffset(node),
-      syncRev: state.syncRev
-    });
-    dragNode = { g, id, node };
-    startX = evt.clientX;
-    startY = evt.clientY;
     const offset = getPinnedOffset(node);
-    startPos = { ...offset };
+    dragNode = {
+      g,
+      id,
+      node,
+      pointerId: evt.pointerId,
+      startClientX: evt.clientX,
+      startClientY: evt.clientY,
+      lastClientX: evt.clientX,
+      lastClientY: evt.clientY,
+      startPos: { ...offset },
+      active: false,
+      rafId: 0
+    };
     g.setPointerCapture(evt.pointerId);
+    evt.preventDefault();
+    evt.stopPropagation();
   });
 
   svg.addEventListener("pointermove", (evt) => {
@@ -2444,13 +2448,34 @@ function attachNodeInteractions(svg) {
       return;
     }
     if (!dragNode) return;
-    const dx = (evt.clientX - startX) / state.zoom;
-    const dy = (evt.clientY - startY) / state.zoom;
-    const baseX = parseFloat(dragNode.g.dataset.baseX || "0");
-    const baseY = parseFloat(dragNode.g.dataset.baseY || "0");
-    const next = { x: startPos.x + dx, y: startPos.y + dy };
-    setPinnedOffset(dragNode.node, next);
-    setNodeTransform(dragNode.g, baseX + next.x, baseY + next.y);
+    if (evt.pointerId !== dragNode.pointerId) return;
+    dragNode.lastClientX = evt.clientX;
+    dragNode.lastClientY = evt.clientY;
+
+    if (!dragNode.active) {
+      const dxPx = evt.clientX - dragNode.startClientX;
+      const dyPx = evt.clientY - dragNode.startClientY;
+      if (Math.hypot(dxPx, dyPx) < DRAG_THRESHOLD_PX) return;
+      dragNode.active = true;
+      devLog("drag:start", {
+        nodeId: dragNode.id,
+        pinnedOffset: dragNode.startPos,
+        syncRev: state.syncRev
+      });
+    }
+
+    if (dragNode.rafId) return;
+    dragNode.rafId = requestAnimationFrame(() => {
+      if (!dragNode || !dragNode.active) return;
+      dragNode.rafId = 0;
+      const dx = (dragNode.lastClientX - dragNode.startClientX) / state.zoom;
+      const dy = (dragNode.lastClientY - dragNode.startClientY) / state.zoom;
+      const baseX = parseFloat(dragNode.g.dataset.baseX || "0");
+      const baseY = parseFloat(dragNode.g.dataset.baseY || "0");
+      const next = { x: dragNode.startPos.x + dx, y: dragNode.startPos.y + dy };
+      setPinnedOffset(dragNode.node, next);
+      setNodeTransform(dragNode.g, baseX + next.x, baseY + next.y);
+    });
   });
 
   svg.addEventListener("pointerup", (evt) => {
@@ -2484,15 +2509,28 @@ function attachNodeInteractions(svg) {
       return;
     }
     if (!dragNode) return;
-    dragNode.g.releasePointerCapture(evt.pointerId);
+    if (evt.pointerId !== dragNode.pointerId) return;
+    if (dragNode.rafId) {
+      cancelAnimationFrame(dragNode.rafId);
+      dragNode.rafId = 0;
+    }
     const id = dragNode.id;
-    const finalOffset = getPinnedOffset(dragNode.node);
+    if (dragNode.active) {
+      const dx = (evt.clientX - dragNode.startClientX) / state.zoom;
+      const dy = (evt.clientY - dragNode.startClientY) / state.zoom;
+      const finalOffset = { x: dragNode.startPos.x + dx, y: dragNode.startPos.y + dy };
+      setPinnedOffset(dragNode.node, finalOffset);
+      dragNode.g.releasePointerCapture(evt.pointerId);
+      dragNode = null;
+      devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
+      selectNodeById(id);
+      pushHistory();
+      renderFromModel();
+      markModelDirty("node position changed");
+      return;
+    }
+    dragNode.g.releasePointerCapture(evt.pointerId);
     dragNode = null;
-    devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
-    selectNodeById(id);
-    pushHistory();
-    renderFromModel();
-    markModelDirty("node position changed");
   });
 }
 
@@ -3021,49 +3059,32 @@ function wireToolbar() {
 function wirePreviewZoom() {
   const wrap = $("previewWrap");
   if (!wrap) return;
-  const updatePanCursor = (target) => {
-    if (document.body.classList.contains("connect-mode")) {
-      wrap.classList.remove("hand-cursor");
-      return;
-    }
-    const onUi = target?.closest?.(".previewZoom");
-    const onInteractive = target?.closest?.("g.node, g.edgePath, g.edgeLabel, circle.ae-handle");
-    const inSvg = !!target?.closest?.("svg");
-    wrap.classList.toggle("hand-cursor", inSvg && !onUi && !onInteractive);
-  };
-
   let isPanning = false;
+  let panPointerId = null;
   let startX = 0;
   let startY = 0;
   let startPanX = 0;
   let startPanY = 0;
 
-  wrap.addEventListener("mousedown", (evt) => {
+  wrap.addEventListener("pointerdown", (evt) => {
     const isMiddle = evt.button === 1;
-    const isLeft = evt.button === 0;
     const isOnUi = evt.target.closest(".previewZoom");
-    const isOnNode = evt.target.closest("g.node") || evt.target.closest("g.edgePath");
-    if (!(isMiddle || (isLeft && !isOnUi && !isOnNode))) return;
+    if (!isMiddle || isOnUi) return;
     evt.preventDefault();
+    evt.stopPropagation();
     isPanning = true;
+    panPointerId = evt.pointerId;
     wrap.classList.add("panning");
     startX = evt.clientX;
     startY = evt.clientY;
     startPanX = state.panX;
     startPanY = state.panY;
+    wrap.setPointerCapture(evt.pointerId);
   });
 
-  wrap.addEventListener("mousemove", (evt) => {
-    if (isPanning) return;
-    updatePanCursor(evt.target);
-  });
-
-  wrap.addEventListener("mouseleave", () => {
-    if (!isPanning) wrap.classList.remove("hand-cursor");
-  });
-
-  window.addEventListener("mousemove", (evt) => {
+  wrap.addEventListener("pointermove", (evt) => {
     if (!isPanning) return;
+    if (panPointerId !== evt.pointerId) return;
     const speed = state.panSpeed || 1;
     const dx = ((evt.clientX - startX) / state.zoom) * speed;
     const dy = ((evt.clientY - startY) / state.zoom) * speed;
@@ -3072,12 +3093,19 @@ function wirePreviewZoom() {
     applyZoom();
   });
 
-  window.addEventListener("mouseup", (evt) => {
+  const endPan = (evt) => {
     if (!isPanning) return;
+    if (panPointerId !== evt.pointerId) return;
     isPanning = false;
+    try {
+      wrap.releasePointerCapture(evt.pointerId);
+    } catch {}
+    panPointerId = null;
     wrap.classList.remove("panning");
-    updatePanCursor(evt.target);
-  });
+  };
+
+  wrap.addEventListener("pointerup", endPan);
+  wrap.addEventListener("pointercancel", endPan);
 
   wrap.addEventListener(
     "wheel",
