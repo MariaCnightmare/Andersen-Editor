@@ -93,10 +93,28 @@ body.dragging {
 .btn:hover { background: var(--btnHover); border-color: var(--border-2); }
 .btn:active { transform: translateY(1px); }
 
+.btn.withIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.uiIcon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.92;
+}
+
 .btnPrimary {
   background: color-mix(in srgb, var(--accent-1) 24%, var(--surface-2) 76%);
   border-color: color-mix(in srgb, var(--accent-1) 55%, var(--border-1) 45%);
-  box-shadow: var(--glow-accent);
+  box-shadow: none;
 }
 
 .btnSecondary {
@@ -194,6 +212,23 @@ body.dragging {
   display: grid;
   gap: 2px;
   min-width: 0;
+  position: relative;
+  padding: 8px 12px 8px 14px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2) 90%, black 10%);
+}
+
+.brand::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 99px;
+  background: var(--accent-1);
+  opacity: 0.9;
 }
 
 .brandTitle {
@@ -202,6 +237,7 @@ body.dragging {
   font-size: 15px;
   line-height: 1.15;
   color: var(--text-1);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
 .brandSub {
@@ -216,6 +252,7 @@ body.dragging {
 
 .toolbarLeft {
   min-width: 0;
+  position: relative;
 }
 
 .toolbarCenter {
@@ -224,7 +261,7 @@ body.dragging {
   gap: 8px;
   min-width: 0;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   padding-bottom: 2px;
 }
 
@@ -245,7 +282,7 @@ body.dragging {
   padding: 4px 7px;
   border: 1px solid var(--border-1);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent 30%);
+  background: var(--surface-2);
 }
 
 .toolbarCenter .group .btn {
@@ -255,7 +292,7 @@ body.dragging {
 }
 
 .toolbarCenter .group .btn:hover {
-  background: color-mix(in srgb, var(--surface-2) 86%, white 14%);
+  background: color-mix(in srgb, var(--surface-2) 88%, white 12%);
   border-color: var(--border-2);
 }
 
@@ -293,20 +330,12 @@ body.dragging {
   padding: 10px;
   border-radius: 12px;
   border: 1px solid var(--border-1);
-  background: color-mix(in srgb, var(--surface-1) 92%, black 8%);
+  background: var(--surface-1);
   box-shadow: var(--shadow-float);
   display: grid;
   gap: 10px;
   z-index: 80;
 }
-@supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
-  .menuPanel {
-    background: rgba(12, 18, 28, 0.74);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
-}
-
 .menuSection {
   display: grid;
   gap: 6px;
@@ -329,7 +358,7 @@ body.dragging {
   padding: 6px 10px;
   border: 1px solid var(--border-1);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface-2) 72%, transparent 28%);
+  background: var(--surface-2);
   font-size: 10px;
   display: flex;
   flex-direction: column;
@@ -384,7 +413,7 @@ body.dragging {
   border: 1px solid var(--border-1);
   border-radius: 8px;
   padding: 4px 6px;
-  background: color-mix(in srgb, var(--surface-2) 72%, transparent 28%);
+  background: var(--surface-2);
 }
 
 .taskProgress.hidden {
@@ -466,7 +495,7 @@ body.dragging {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: color-mix(in srgb, var(--surface-2) 65%, transparent 35%);
+  background: color-mix(in srgb, var(--surface-2) 92%, black 8%);
 }
 
 .paneBody {
@@ -513,7 +542,7 @@ body.dragging {
   min-height: 0;              /* 空なら0に落とす */
   max-height: none;
   border-top: 1px solid var(--border-1);
-  background: color-mix(in srgb, var(--surface-2) 68%, transparent 32%);
+  background: var(--surface-2);
   overflow: auto;
 }
 
@@ -569,7 +598,7 @@ body.inspector-hidden .inlineInspector {
 .internalPanel {
   border: 1px solid transparent;
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface-2) 60%, transparent 40%);
+  background: var(--surface-2);
   padding: 0;
 }
 
@@ -603,13 +632,13 @@ body.inspector-hidden .inlineInspector {
   cursor: row-resize;
   border-top: 1px solid var(--border-1);
   border-bottom: 1px solid var(--border-1);
-  background: color-mix(in srgb, var(--surface-2) 65%, transparent 35%);
+  background: var(--surface-2);
   z-index: 5;
 }
 
 .problems {
   border-top: 1px solid var(--border-1);
-  background: color-mix(in srgb, var(--surface-2) 66%, transparent 34%);
+  background: var(--surface-2);
   height: var(--problems-h);
   min-height: 0;
   overflow: hidden;
@@ -752,19 +781,11 @@ body.connect-mode #previewWrap {
   padding: 4px 6px;
   border-radius: var(--radius);
   border: 1px solid var(--border-1);
-  background: color-mix(in srgb, var(--surface-2) 76%, transparent 24%);
+  background: var(--surface-2);
   margin-bottom: 0;
   align-self: flex-start;
   box-shadow: none;
 }
-@supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
-  .previewZoom {
-    background: rgba(13, 20, 30, 0.62);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
-}
-
 .btnMini {
   padding: 2px 6px;
   font-size: 11px;
@@ -773,7 +794,7 @@ body.connect-mode #previewWrap {
 
 .btn.active {
   border-color: var(--border-3);
-  box-shadow: var(--glow-accent);
+  box-shadow: none;
 }
 
 .zoomRow {
@@ -838,7 +859,7 @@ body.connect-mode #previewWrap {
 .preview svg g.node.ae-selected > * {
   stroke: var(--accent-1) !important;
   stroke-width: 3px !important;
-  filter: drop-shadow(0 0 6px rgba(91, 171, 255, 0.35));
+  filter: none;
 }
 
 .preview svg g.node.ae-hover > * {
@@ -855,7 +876,7 @@ body.connect-mode #previewWrap {
 .preview svg g.edgePath.ae-selected path {
   stroke: var(--accent-1) !important;
   stroke-width: 3px !important;
-  filter: drop-shadow(0 0 6px rgba(91, 171, 255, 0.35));
+  filter: none;
 }
 
 .preview svg g.edgePath.ae-hover path {
@@ -928,20 +949,12 @@ body.problems-collapsed .problemsList {
   padding: 6px;
   border: 1px solid var(--border-1);
   border-radius: 10px;
-  background: rgba(10, 17, 26, 0.96);
+  background: var(--surface-1);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
   z-index: 2000;
   display: grid;
   gap: 4px;
 }
-@supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
-  .contextMenu {
-    background: rgba(10, 17, 26, 0.70);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
-}
-
 .contextMenu.hidden {
   display: none;
 }
@@ -1005,7 +1018,7 @@ body.problems-collapsed .problemsList {
   padding: 6px;
   border: 1px solid var(--border-1);
   border-radius: 8px;
-  background: rgba(10, 17, 26, 0.96);
+  background: var(--surface-1);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
   z-index: 2100;
 }
@@ -1152,7 +1165,7 @@ body:not(.right-collapsed) .edgeBtn.right {
 .addCard {
   border: 1px solid transparent;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-2) 88%, transparent 12%);
+  background: var(--surface-2);
   box-shadow: none;
   border-bottom: none;
 }
@@ -1198,7 +1211,7 @@ body:not(.right-collapsed) .edgeBtn.right {
   padding: 9px 10px;
   border-radius: 10px;
   border: 1px solid transparent;
-  background: color-mix(in srgb, var(--surface-2) 72%, transparent 28%);
+  background: var(--surface-2);
   cursor: pointer;
   transition: background var(--t-fast) ease, border-color var(--t-fast) ease, transform var(--t-fast) ease;
 }
@@ -1227,7 +1240,7 @@ body:not(.right-collapsed) .edgeBtn.right {
 
 .item.active {
   border-color: var(--border-3);
-  background: color-mix(in srgb, var(--accent-1) 12%, var(--surface-2) 88%);
+  background: color-mix(in srgb, var(--surface-2) 86%, var(--accent-1) 14%);
 }
 
 .item.active .name {

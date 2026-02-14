@@ -26,7 +26,7 @@
   <script src="../../node_modules/mermaid/dist/mermaid.min.js"></script>
 
   <link rel="stylesheet" href="./tokens.css?v=1" />
-  <link rel="stylesheet" href="./style.css?v=2" />
+  <link rel="stylesheet" href="./style.css?v=3" />
 </head>
 
 <body>
@@ -102,7 +102,13 @@
     <div class="toolbarCenter">
       <div class="group">
         <details class="menu">
-          <summary class="btn">File</summary>
+          <summary class="btn withIcon">
+            <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 2h5l3 3v9H4z"></path>
+              <path d="M9 2v3h3"></path>
+            </svg>
+            <span>File</span>
+          </summary>
           <div class="menuPanel">
             <button id="btnNew" class="btn">新規</button>
             <button id="btnOpen" class="btn">開く</button>
@@ -111,7 +117,14 @@
           </div>
         </details>
         <details class="menu">
-          <summary class="btn">Clipboard</summary>
+          <summary class="btn withIcon">
+            <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="4" y="3" width="8" height="11" rx="1.5"></rect>
+              <path d="M6 3.5h4"></path>
+              <path d="M6.5 2h3a1 1 0 0 1 1 1v1h-5V3a1 1 0 0 1 1-1z"></path>
+            </svg>
+            <span>Clipboard</span>
+          </summary>
           <div class="menuPanel">
             <button id="btnCopyMermaid" class="btn">Copy Mermaid</button>
             <button id="btnPasteMermaid" class="btn">Paste Mermaid</button>
@@ -120,7 +133,14 @@
           </div>
         </details>
         <details class="menu">
-          <summary class="btn btnPrimary">Export</summary>
+          <summary class="btn btnPrimary withIcon">
+            <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 2v7"></path>
+              <path d="M5.5 6.5 8 9l2.5-2.5"></path>
+              <path d="M3 10.5v2.5h10v-2.5"></path>
+            </svg>
+            <span>Export</span>
+          </summary>
           <div class="menuPanel">
             <button id="btnExportMermaid" class="btn">Mermaid</button>
             <button id="btnExportSvg" class="btn">SVG</button>
@@ -131,8 +151,20 @@
         </details>
       </div>
       <div class="group">
-        <button id="btnUndo" class="btn btnSecondary">Undo</button>
-        <button id="btnRedo" class="btn btnSecondary">Redo</button>
+        <button id="btnUndo" class="btn btnSecondary withIcon">
+          <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6.5 4 3.5 7l3 3"></path>
+            <path d="M4 7h5a3.5 3.5 0 1 1 0 7"></path>
+          </svg>
+          <span>Undo</span>
+        </button>
+        <button id="btnRedo" class="btn btnSecondary withIcon">
+          <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="m9.5 4 3 3-3 3"></path>
+            <path d="M12 7H7a3.5 3.5 0 1 0 0 7"></path>
+          </svg>
+          <span>Redo</span>
+        </button>
         <button id="btnFormat" class="btn btnSecondary">Format</button>
         <button id="btnApplyText" class="btn">Apply <span class="applyBadge">●</span></button>
         <button id="btnRelayout" class="btn btnSecondary">Re-layout</button>

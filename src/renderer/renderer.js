@@ -49,19 +49,30 @@ const state = {
   showInternalBlocks: false,
   devMode: false,
   connectMode: false,
+  inspectorVisible: false,
   prevRawBlocks: null,
   mermaid: null,
   syncRev: 0,
   outOfSync: false,
   docHistory: [],
   docHistoryMax: 30,
-  lastProgrammaticEditorText: null
+  lastProgrammaticEditorText: null,
+  exportDialogCtx: null,
+  exportDialogWired: false,
+  taskDepth: 0,
+  nativeMenuWired: false,
+  menuHandlers: {},
+  exportRecentPaths: [],
+  statusDetailsOpen: false,
+  lastAutoScaleKey: ""
 };
 
 const els = {
   preview: $("preview"),
   statusWrap: document.querySelector(".status"),
   statusText: $("statusText"),
+  btnStatusDetails: $("btnStatusDetails"),
+  statusMetaWrap: $("statusMetaWrap"),
   statusDpr: $("statusDpr"),
   statusZoom: $("statusZoom"),
   statusBackend: $("statusBackend"),
@@ -73,6 +84,9 @@ const els = {
   statusGpu: $("statusGpu"),
   statusSizes: $("statusSizes"),
   statusWarn: $("statusWarn"),
+  taskProgress: $("taskProgress"),
+  taskProgressBar: $("taskProgressBar"),
+  taskProgressLabel: $("taskProgressLabel"),
   fileInfo: $("fileInfo"),
   zoomText: $("zoomText"),
   srcEditor: $("srcEditor"),
@@ -134,6 +148,7 @@ const els = {
   btnFormat: $("btnFormat"),
   btnRelayout: $("btnRelayout"),
   btnConnect: $("btnConnect"),
+  btnToggleInspector: $("btnToggleInspector"),
   btnCollapseLeft: $("btnCollapseLeft"),
   btnCollapseRight: $("btnCollapseRight"),
   btnExpandLeft: $("btnExpandLeft"),
@@ -141,6 +156,20 @@ const els = {
   btnCopyDiagnostics: $("btnCopyDiagnostics"),
   btnRestoreSnapshot: $("btnRestoreSnapshot"),
   ctxMenu: $("ctxMenu"),
+  textPromptDialog: $("textPromptDialog"),
+  textPromptTitle: $("textPromptTitle"),
+  textPromptInput: $("textPromptInput"),
+  btnTextPromptCancel: $("btnTextPromptCancel"),
+  btnTextPromptOk: $("btnTextPromptOk"),
+  exportDialog: $("exportDialog"),
+  exportFormat: $("exportFormat"),
+  exportPathInput: $("exportPathInput"),
+  exportRecentList: $("exportRecentList"),
+  btnExportBrowse: $("btnExportBrowse"),
+  exportOpenFolder: $("exportOpenFolder"),
+  exportError: $("exportError"),
+  btnExportCancel: $("btnExportCancel"),
+  btnExportRun: $("btnExportRun"),
   newDialog: $("newDialog"),
   btnNewCancel: $("btnNewCancel"),
   btnAddNode: $("btnAddNode"),
@@ -155,6 +184,18 @@ function setStatus(level, msg) {
   els.statusWrap.classList.toggle("dirty", level === "dirty");
   els.statusWrap.classList.toggle("warn", level === "warn");
   if (level === "ok") setStatusReason("");
+}
+
+function updateStatusDetailsVisibility() {
+  const canShow = !!state.devMode;
+  if (els.btnStatusDetails) {
+    els.btnStatusDetails.classList.toggle("hidden", !canShow);
+    els.btnStatusDetails.textContent = canShow && state.statusDetailsOpen ? "Hide" : "Details";
+  }
+  if (els.statusMetaWrap) {
+    const open = canShow && !!state.statusDetailsOpen;
+    els.statusMetaWrap.classList.toggle("hidden", !open);
+  }
 }
 
 function updateDprStatus() {
@@ -214,18 +255,20 @@ async function updateDiagnostics() {
       if (!state.devMode) {
         els.statusWarn.textContent = "";
       } else if (diag.warning) {
-        els.statusWarn.textContent = `warn:${diag.warning}`;
+        els.statusWarn.textContent = `info:${diag.warning}`;
       } else if (diag?.ozoneDecision?.reason) {
         const reason = String(diag.ozoneDecision.reason || "unknown");
-        const prefix = reason === "wsl_decorations_default" ? "auto" : reason;
-        els.statusWarn.textContent = `ozone:${prefix}->${diag.ozoneDecision.resolved}`;
+        const from = diag?.ozoneDecision?.envHint ? "env" : reason === "wsl_decorations_default" ? "auto" : reason;
+        els.statusWarn.textContent = `ozone:${from}->${diag.ozoneDecision.resolved} (${reason})`;
       } else {
         els.statusWarn.textContent = "";
       }
     }
+    updateStatusDetailsVisibility();
     return diag;
   } catch (err) {
     if (els.statusWarn) els.statusWarn.textContent = state.devMode ? "warn:diag unavailable" : "";
+    updateStatusDetailsVisibility();
   }
   return null;
 }
@@ -243,6 +286,29 @@ async function applyUiZoom(choice, diag = null) {
     document.documentElement.style.fontSize = `${Math.round(zoomFactor * 100)}%`;
   }
   return { normalized, zoomFactor };
+}
+
+async function syncAutoUiScaleIfNeeded({ force = false } = {}) {
+  if (!els.selUiScale) return;
+  const pref = normalizeUiScaleChoice(els.selUiScale.value) || "auto";
+  if (pref !== "auto") {
+    state.lastAutoScaleKey = "";
+    return;
+  }
+  const diag = await updateDiagnostics();
+  if (!diag) return;
+  const dpr = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+  const scale = Math.round((Number(diag.displayScale) || 1) * 100) / 100;
+  const nextKey = `${dpr}|${scale}`;
+  if (!force && state.lastAutoScaleKey === nextKey) return;
+  state.lastAutoScaleKey = nextKey;
+  try {
+    await applyUiZoom("auto", diag);
+  } catch (err) {
+    if (state.devMode && els.statusWarn) {
+      els.statusWarn.textContent = `warn:${err?.message || "ui scale auto apply failed"}`;
+    }
+  }
 }
 
 function clearError({ preserveStatus = false } = {}) {
@@ -336,13 +402,62 @@ function addCtxGroup(container, label, items) {
   }
   details.appendChild(summary);
   details.appendChild(body);
-  details.addEventListener("mouseenter", () => {
+  summary.addEventListener("pointerdown", (evt) => {
+    evt.preventDefault();
+    container.querySelectorAll(".ctxGroup[open]").forEach((el) => {
+      if (el !== details) el.open = false;
+    });
+    details.open = !details.open;
+  });
+  details.addEventListener("pointerenter", () => {
+    container.querySelectorAll(".ctxGroup[open]").forEach((el) => {
+      if (el !== details) el.open = false;
+    });
     details.open = true;
   });
-  details.addEventListener("mouseleave", () => {
-    details.open = false;
-  });
   container.appendChild(details);
+}
+
+function requestTextInput(title, defaultValue = "") {
+  if (!els.textPromptDialog || !els.textPromptInput || !els.textPromptTitle) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    const close = (value) => {
+      els.textPromptDialog.classList.add("hidden");
+      els.textPromptInput.removeEventListener("keydown", onKeyDown);
+      els.btnTextPromptOk?.removeEventListener("click", onOk);
+      els.btnTextPromptCancel?.removeEventListener("click", onCancel);
+      els.textPromptDialog.removeEventListener("click", onBackdrop);
+      resolve(value);
+    };
+    const onOk = () => close(String(els.textPromptInput.value || "").trim());
+    const onCancel = () => close(null);
+    const onBackdrop = (evt) => {
+      if (evt.target === els.textPromptDialog) onCancel();
+    };
+    const onKeyDown = (evt) => {
+      if (evt.key === "Enter") {
+        evt.preventDefault();
+        onOk();
+      } else if (evt.key === "Escape") {
+        evt.preventDefault();
+        onCancel();
+      }
+    };
+
+    els.textPromptTitle.textContent = title || "Input";
+    els.textPromptInput.value = defaultValue || "";
+    els.textPromptDialog.classList.remove("hidden");
+    setTimeout(() => {
+      els.textPromptInput.focus();
+      els.textPromptInput.select();
+    }, 0);
+    els.textPromptInput.addEventListener("keydown", onKeyDown);
+    els.btnTextPromptOk?.addEventListener("click", onOk);
+    els.btnTextPromptCancel?.addEventListener("click", onCancel);
+    els.textPromptDialog.addEventListener("click", onBackdrop);
+  });
 }
 
 function normalizeHexColor(value) {
@@ -766,6 +881,277 @@ function showToast(message) {
   }, 2000);
 }
 
+function beginTask(label = "processing...") {
+  state.taskDepth += 1;
+  if (!els.taskProgress) return;
+  els.taskProgress.classList.remove("hidden");
+  if (els.taskProgressLabel) els.taskProgressLabel.textContent = label;
+  if (els.taskProgressBar) {
+    els.taskProgressBar.classList.add("indeterminate");
+  }
+}
+
+function endTask() {
+  state.taskDepth = Math.max(0, state.taskDepth - 1);
+  if (state.taskDepth > 0) return;
+  if (!els.taskProgress) return;
+  els.taskProgress.classList.add("hidden");
+  if (els.taskProgressBar) {
+    els.taskProgressBar.classList.add("indeterminate");
+    els.taskProgressBar.style.width = "";
+  }
+}
+
+function setTaskProgress(value, label = "") {
+  if (!els.taskProgressBar) return;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return;
+  const clamped = Math.max(0, Math.min(1, n));
+  els.taskProgressBar.classList.remove("indeterminate");
+  els.taskProgressBar.style.width = `${Math.round(clamped * 100)}%`;
+  if (label && els.taskProgressLabel) els.taskProgressLabel.textContent = label;
+}
+
+async function withTask(label, fn) {
+  beginTask(label);
+  try {
+    return await fn();
+  } finally {
+    endTask();
+  }
+}
+
+function exportTimestampToken() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
+
+function normalizeExportFormat(value) {
+  const v = String(value || "").toLowerCase();
+  if (v === "svg") return "svg";
+  if (v === "png") return "png";
+  if (v === "pdf") return "pdf";
+  if (v === "modeljson" || v === "model_json" || v === "json") return "modelJson";
+  return "mermaid";
+}
+
+function extensionForExportFormat(format) {
+  const f = normalizeExportFormat(format);
+  if (f === "svg") return ".svg";
+  if (f === "png") return ".png";
+  if (f === "pdf") return ".pdf";
+  if (f === "modelJson") return ".json";
+  return ".mmd";
+}
+
+function buildDefaultExportPath(format) {
+  const ext = extensionForExportFormat(format);
+  if (state.filePath) {
+    const base = state.filePath.replace(/\.[^.\\/]+$/, "");
+    return `${base}${ext}`;
+  }
+  return `andersen-export-${exportTimestampToken()}${ext}`;
+}
+
+function normalizeExportPathInput(inputPath, format) {
+  const ext = extensionForExportFormat(format);
+  const trimmed = String(inputPath || "").trim();
+  if (!trimmed) return "";
+  if (/[\\/]$/.test(trimmed)) {
+    return `${trimmed}andersen-export-${exportTimestampToken()}${ext}`;
+  }
+  if (trimmed.toLowerCase().endsWith(ext)) return trimmed;
+  return `${trimmed.replace(/\.[^.\\/]+$/, "")}${ext}`;
+}
+
+function loadExportRecentPaths() {
+  try {
+    const raw = localStorage.getItem("ae:exportRecentPaths");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x) => typeof x === "string" && x.trim()).slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+function saveExportRecentPath(pathValue) {
+  const p = String(pathValue || "").trim();
+  if (!p) return;
+  const next = [p, ...state.exportRecentPaths.filter((x) => x !== p)].slice(0, 5);
+  state.exportRecentPaths = next;
+  try {
+    localStorage.setItem("ae:exportRecentPaths", JSON.stringify(next));
+  } catch {}
+  renderExportRecentPaths();
+}
+
+function renderExportRecentPaths() {
+  if (els.exportRecentList) {
+    els.exportRecentList.innerHTML = "";
+    for (const item of state.exportRecentPaths) {
+      const opt = document.createElement("option");
+      opt.value = item;
+      els.exportRecentList.appendChild(opt);
+    }
+  }
+}
+
+function setExportError(message) {
+  if (!els.exportError) return;
+  const msg = String(message || "");
+  if (!msg) {
+    els.exportError.textContent = "";
+    els.exportError.classList.add("hidden");
+    return;
+  }
+  els.exportError.textContent = msg;
+  els.exportError.classList.remove("hidden");
+}
+
+function validateExportPath(inputPath, format) {
+  const raw = String(inputPath || "").trim();
+  if (!raw) {
+    return { ok: false, error: "保存先パスを入力してください。" };
+  }
+  if (raw.includes("\u0000")) {
+    return { ok: false, error: "保存先パスに無効文字が含まれています。" };
+  }
+  if (/[<>:\"|?*]/.test(raw)) {
+    return { ok: false, error: "保存先パスに無効文字（<>:\"|?*）が含まれています。" };
+  }
+  const normalized = normalizeExportPathInput(raw, format);
+  const changed = normalized !== raw;
+  return { ok: true, path: normalized, changed };
+}
+
+function closeExportDialog() {
+  if (!els.exportDialog) return;
+  els.exportDialog.classList.add("hidden");
+  setExportError("");
+  state.exportDialogCtx = null;
+}
+
+async function runExportFromDialog() {
+  const ctx = state.exportDialogCtx;
+  if (!ctx) return;
+  const format = normalizeExportFormat(els.exportFormat?.value || ctx.format);
+  const validation = validateExportPath(els.exportPathInput?.value, format);
+  if (!validation.ok) {
+    setExportError(validation.error);
+    return;
+  }
+  const filePath = validation.path;
+  if (validation.changed && els.exportPathInput) {
+    els.exportPathInput.value = filePath;
+  }
+  let res = null;
+  if (format === "svg") {
+    const content = getSvgText();
+    if (!content) {
+      setExportError("SVGプレビューが取得できません。先にApplyしてレンダしてください。");
+      return;
+    }
+    res = await window.api?.exportWriteFile?.({ format, filePath, content });
+  } else if (format === "mermaid") {
+    const content = getFullSourceForOutput();
+    res = await window.api?.exportWriteFile?.({ format, filePath, content });
+  } else if (format === "png") {
+    const svgText = getSvgText();
+    if (!svgText) {
+      setExportError("SVGプレビューが取得できません。先にApplyしてレンダしてください。");
+      return;
+    }
+    try {
+      setTaskProgress(0.35, "rendering png...");
+      const pngBase64 = await svgToPng(svgText);
+      setTaskProgress(0.75, "saving png...");
+      res = await window.api?.exportWritePngFile?.({ pngBase64, filePath });
+    } catch (err) {
+      setExportError(err?.message || "PNG変換に失敗しました。");
+      return;
+    }
+  } else if (format === "pdf") {
+    setTaskProgress(0.55, "printing pdf...");
+    res = await window.api?.exportWritePdfFile?.({ filePath });
+  } else if (format === "modelJson") {
+    const modelJson = getModelJsonText();
+    res = await window.api?.exportWriteModelJsonFile?.({ modelJson, filePath });
+  }
+  if (!res?.ok) {
+    if (!res?.canceled) setExportError(res?.error || "Exportに失敗しました。");
+    return;
+  }
+  saveExportRecentPath(res.filePath || filePath);
+  if (els.exportOpenFolder?.checked) {
+    await window.api?.showItemInFolder?.({ filePath: res.filePath });
+  }
+  const reason = `export-${format}`;
+  addDocSnapshot(reason);
+  showToast(`保存しました: ${res.filePath}`);
+  closeExportDialog();
+}
+
+function openExportDialog(initialFormat) {
+  if (!els.exportDialog || !els.exportFormat || !els.exportPathInput) return;
+  const format = normalizeExportFormat(initialFormat);
+  state.exportDialogCtx = { format };
+  els.exportFormat.value = format;
+  els.exportPathInput.value = buildDefaultExportPath(format);
+  if (els.exportOpenFolder) els.exportOpenFolder.checked = false;
+  renderExportRecentPaths();
+  setExportError("");
+  els.exportDialog.classList.remove("hidden");
+  els.exportPathInput.focus();
+  els.exportPathInput.select();
+}
+
+function wireExportDialog() {
+  if (state.exportDialogWired) return;
+  if (!els.exportDialog || !els.exportFormat || !els.exportPathInput) return;
+  state.exportDialogWired = true;
+  if (!state.exportRecentPaths.length) {
+    state.exportRecentPaths = loadExportRecentPaths();
+    renderExportRecentPaths();
+  }
+
+  els.exportFormat.addEventListener("change", () => {
+    const format = normalizeExportFormat(els.exportFormat.value);
+    const v = String(els.exportPathInput.value || "").trim();
+    els.exportPathInput.value = v ? normalizeExportPathInput(v, format) : buildDefaultExportPath(format);
+    setExportError("");
+  });
+
+  els.btnExportBrowse?.addEventListener("click", async () => {
+    const format = normalizeExportFormat(els.exportFormat.value);
+    const currentPath = String(els.exportPathInput.value || "").trim() || buildDefaultExportPath(format);
+    const res = await window.api?.chooseExportPath?.({ format, filePath: currentPath });
+    if (res?.ok && res.filePath) {
+      els.exportPathInput.value = res.filePath;
+      setExportError("");
+    } else if (res && !res.canceled) {
+      setExportError(res.error || "保存先の選択に失敗しました。");
+    }
+  });
+
+  els.btnExportCancel?.addEventListener("click", () => closeExportDialog());
+  els.btnExportRun?.addEventListener("click", async () => {
+    await withTask("exporting...", async () => {
+      await runExportFromDialog();
+    });
+  });
+  els.exportDialog.addEventListener("click", (evt) => {
+    if (evt.target === els.exportDialog) closeExportDialog();
+  });
+}
+
 function getEditorBaseText() {
   return state.editor.getValue();
 }
@@ -950,6 +1336,10 @@ function createEditor(_container, textarea) {
 async function initEditor() {
   try {
     state.editor = createEditor(els.srcEditor, els.srcTextarea);
+    // CodeMirror is mounted from textarea; keep the placeholder container hidden
+    // and do not re-show textarea, otherwise a blank block remains above editor.
+    if (els.srcEditor) els.srcEditor.style.display = "none";
+    if (state.editor?.cm && els.srcTextarea) els.srcTextarea.style.display = "none";
   } catch (err) {
     console.warn("CodeMirror init failed. Falling back to textarea.", err);
     els.srcEditor.style.display = "none";
@@ -1032,6 +1422,7 @@ function updateApplyButton() {
 function updateInternalToggleVisibility() {
   const hasInternal = !!(state.model?.rawBlocks && state.model.rawBlocks.length);
   const showDev = state.devMode;
+  document.body.classList.toggle("dev-mode", showDev);
   if (els.internalPanel) {
     els.internalPanel.classList.toggle("hidden", !showDev || !hasInternal);
     if (!showDev) {
@@ -1051,6 +1442,20 @@ function updateInternalToggleVisibility() {
   if (!hasInternal && !state.showInternalBlocks && els.toggleInternalBlocks) {
     els.toggleInternalBlocks.checked = false;
   }
+  updateStatusDetailsVisibility();
+}
+
+function applyInspectorVisibility() {
+  document.body.classList.toggle("inspector-hidden", !state.inspectorVisible);
+  if (els.btnToggleInspector) {
+    els.btnToggleInspector.classList.toggle("active", state.inspectorVisible);
+    els.btnToggleInspector.textContent = state.inspectorVisible ? "Inspector ON" : "Inspector OFF";
+  }
+}
+
+function setInspectorEmptyState(isEmpty) {
+  if (!els.inspector) return;
+  els.inspector.classList.toggle("is-empty", !!isEmpty);
 }
 
 function nextId(prefix, existingIds) {
@@ -1756,6 +2161,7 @@ function applyConnectHandles(svg) {
 function renderPropPanel() {
   const inspectorBody = els.inspectorBody || els.inspector;
   if (state.edgeAmbiguous) {
+    setInspectorEmptyState(false);
     if (inspectorBody) inspectorBody.innerHTML = "";
     const row = document.createElement("div");
     row.className = "propRow";
@@ -1775,9 +2181,11 @@ function renderPropPanel() {
   if (!target) {
     if (inspectorBody) inspectorBody.textContent = "Select a node/edge to edit";
     setInspectorHeader("Inspector", "Select", "muted");
+    setInspectorEmptyState(true);
     updateInspectorState();
     return;
   }
+  setInspectorEmptyState(false);
 
   const isHover = target.mode === "hover";
   if (inspectorBody) inspectorBody.innerHTML = "";
@@ -2084,8 +2492,8 @@ function renderPropPanel() {
       markModelDirty("zone assignment changed");
     });
 
-    btnNewZone.addEventListener("click", () => {
-      const label = window.prompt("Zone name", "New Zone");
+    btnNewZone.addEventListener("click", async () => {
+      const label = await requestTextInput("Zone name", "New Zone");
       if (!label) return;
       const roleId = "vpc";
       const ids = new Set(state.model.boundaries.map((b) => b.id));
@@ -2351,11 +2759,11 @@ function attachNodeInteractions(svg) {
       const id = getNodeIdFromElement(evt.target);
       if (id) selectNodeById(id);
     });
-    g.addEventListener("dblclick", (evt) => {
+    g.addEventListener("dblclick", async (evt) => {
       const id = getNodeIdFromElement(evt.target);
       if (!id) return;
       const node = state.model.nodes.find((n) => n.id === id);
-      const next = window.prompt("Node label", node?.label || id);
+      const next = await requestTextInput("Node label", node?.label || id);
       if (next == null) return;
       node.label = next;
       selectNodeById(id);
@@ -2692,6 +3100,55 @@ function wireToolbar() {
     }
     return prep.content;
   };
+  const handleOpen = async () => {
+    await withTask("opening file...", async () => {
+      const res = await window.api.openMmd();
+      if (res.canceled) return;
+      state.filePath = res.filePath;
+      setFileInfo();
+      const opened = res.content || "";
+      updateEditorText(state.showInternalBlocks ? opened : stripInternalBlocks(opened));
+      state.textDirty = false;
+      updateApplyButton();
+      const embedded = extractModelFromText(res.content || "");
+      if (embedded) state.model = embedded;
+      if (embedded) {
+        pushHistory();
+        renderFromModel();
+        return;
+      }
+      showWarning("AE:MODEL not found. Parsing Mermaid source.");
+      await renderFromText({ live: false });
+    });
+  };
+  const handleSaveAs = async () => {
+    await withTask("saving as...", async () => {
+      const content = await preparePersistContent();
+      if (!content) return;
+      const res = await window.api.saveMmdAs({ content, defaultFilePath: state.filePath });
+      if (res.canceled) return;
+      state.filePath = res.filePath;
+      setFileInfo();
+    });
+  };
+  const handleSave = async () => {
+    await withTask("saving...", async () => {
+      const content = await preparePersistContent();
+      if (!content) return;
+      if (!state.filePath) {
+        const res = await window.api.saveMmdAs({ content, defaultFilePath: state.filePath });
+        if (res.canceled) return;
+        state.filePath = res.filePath;
+        setFileInfo();
+        return;
+      }
+      const res = await window.api.saveMmd({ filePath: state.filePath, content });
+      if (!res.ok) showError(res.error || "Save failed");
+    });
+  };
+  state.menuHandlers["file:open"] = handleOpen;
+  state.menuHandlers["file:save"] = handleSave;
+  state.menuHandlers["file:saveAs"] = handleSaveAs;
 
   els.btnNew.addEventListener("click", () => {
     if (els.newDialog) {
@@ -2700,48 +3157,11 @@ function wireToolbar() {
     }
   });
 
-  els.btnOpen.addEventListener("click", async () => {
-    const res = await window.api.openMmd();
-    if (res.canceled) return;
-    state.filePath = res.filePath;
-    setFileInfo();
-    const opened = res.content || "";
-    updateEditorText(state.showInternalBlocks ? opened : stripInternalBlocks(opened));
-    state.textDirty = false;
-    updateApplyButton();
-    const embedded = extractModelFromText(res.content || "");
-    if (embedded) state.model = embedded;
-    if (embedded) {
-      pushHistory();
-      renderFromModel();
-      return;
-    }
-    showWarning("AE:MODEL not found. Parsing Mermaid source.");
-    await renderFromText({ live: false });
-  });
+  els.btnOpen.addEventListener("click", handleOpen);
 
-  els.btnSaveAs.addEventListener("click", async () => {
-    const content = await preparePersistContent();
-    if (!content) return;
-    const res = await window.api.saveMmdAs({ content, defaultFilePath: state.filePath });
-    if (res.canceled) return;
-    state.filePath = res.filePath;
-    setFileInfo();
-  });
+  els.btnSaveAs.addEventListener("click", handleSaveAs);
 
-  els.btnSave.addEventListener("click", async () => {
-    const content = await preparePersistContent();
-    if (!content) return;
-    if (!state.filePath) {
-      const res = await window.api.saveMmdAs({ content, defaultFilePath: state.filePath });
-      if (res.canceled) return;
-      state.filePath = res.filePath;
-      setFileInfo();
-      return;
-    }
-    const res = await window.api.saveMmd({ filePath: state.filePath, content });
-    if (!res.ok) showError(res.error || "Save failed");
-  });
+  els.btnSave.addEventListener("click", handleSave);
 
   els.btnCopyMermaid.addEventListener("click", async () => {
     try {
@@ -2775,16 +3195,20 @@ function wireToolbar() {
   });
 
   els.btnCopyPng.addEventListener("click", async () => {
-    try {
-      const svgText = getSvgText();
-      if (!svgText) return showError("SVGがありません");
-      const pngBase64 = await svgToPng(svgText);
-      const blob = await (await fetch(pngBase64)).blob();
-      const item = new ClipboardItem({ "image/png": blob });
-      await navigator.clipboard.write([item]);
-    } catch (err) {
-      showError(err);
-    }
+    await withTask("copying png...", async () => {
+      try {
+        const svgText = getSvgText();
+        if (!svgText) return showError("SVGがありません");
+        setTaskProgress(0.4, "rendering png...");
+        const pngBase64 = await svgToPng(svgText);
+        setTaskProgress(0.8, "writing clipboard...");
+        const blob = await (await fetch(pngBase64)).blob();
+        const item = new ClipboardItem({ "image/png": blob });
+        await navigator.clipboard.write([item]);
+      } catch (err) {
+        showError(err);
+      }
+    });
   });
 
   els.btnUndo.addEventListener("click", () => {
@@ -2823,58 +3247,34 @@ function wireToolbar() {
       setConnectMode(!state.connectMode);
     });
   }
-
-  if (els.btnExportMermaid) {
-    els.btnExportMermaid.addEventListener("click", async () => {
-      const mermaidText = getFullSourceForOutput();
-      const defaultFilePath = state.filePath ? state.filePath.replace(/\.[^.]+$/, ".mmd") : "diagram.mmd";
-      const res = await window.api.exportMermaid({ mermaidText, defaultFilePath });
-      if (res.ok) addDocSnapshot("export-mermaid");
-      if (!res.ok && !res.canceled) showError(res.error || "Mermaid export failed");
+  if (els.btnToggleInspector) {
+    els.btnToggleInspector.addEventListener("click", () => {
+      state.inspectorVisible = !state.inspectorVisible;
+      localStorage.setItem("ae:inspectorVisible", state.inspectorVisible ? "1" : "0");
+      applyInspectorVisibility();
     });
   }
 
-  els.btnExportSvg.addEventListener("click", async () => {
-    const svgText = getSvgText();
-    if (!svgText) return showError("SVGがありません");
-    const res = await window.api.exportSvg({ svgText, defaultFilePath: state.filePath });
-    if (res.ok) addDocSnapshot("export-svg");
-    if (!res.ok && !res.canceled) showError(res.error || "SVG export failed");
-  });
+  if (els.btnStatusDetails) {
+    els.btnStatusDetails.addEventListener("click", () => {
+      state.statusDetailsOpen = !state.statusDetailsOpen;
+      localStorage.setItem("ae:statusDetailsOpen", state.statusDetailsOpen ? "1" : "0");
+      updateStatusDetailsVisibility();
+    });
+  }
 
-  els.btnExportPng.addEventListener("click", async () => {
-    const svgText = getSvgText();
-    if (!svgText) return showError("SVGがありません");
-    try {
-      const pngBase64 = await svgToPng(svgText);
-      const res = await window.api.exportPng({ pngBase64, defaultFilePath: state.filePath });
-      if (res.ok) addDocSnapshot("export-png");
-      if (!res.ok && !res.canceled) showError(res.error || "PNG export failed");
-    } catch (err) {
-      showError(err);
-    }
-  });
+  if (els.btnExportMermaid) {
+    els.btnExportMermaid.addEventListener("click", () => openExportDialog("mermaid"));
+  }
 
-  els.btnExportPdf.addEventListener("click", async () => {
-    const res = await window.api.exportPdf({ defaultFilePath: state.filePath });
-    if (res.ok) addDocSnapshot("export-pdf");
-    if (!res.ok && !res.canceled) showError(res.error || "PDF export failed");
-  });
+  els.btnExportSvg.addEventListener("click", () => openExportDialog("svg"));
+
+  els.btnExportPng.addEventListener("click", () => openExportDialog("png"));
+
+  els.btnExportPdf.addEventListener("click", () => openExportDialog("pdf"));
 
   if (els.btnExportModelJson) {
-    els.btnExportModelJson.addEventListener("click", async () => {
-      try {
-        const modelJson = getModelJsonText();
-        const defaultFilePath = state.filePath
-          ? state.filePath.replace(/\.[^.]+$/, ".model.json")
-          : "diagram.model.json";
-        const res = await window.api.exportModelJson({ modelJson, defaultFilePath });
-        if (res.ok) addDocSnapshot("export-model-json");
-        if (!res.ok && !res.canceled) showError(res.error || "MODEL export failed");
-      } catch (err) {
-        showError(err);
-      }
-    });
+    els.btnExportModelJson.addEventListener("click", () => openExportDialog("modelJson"));
   }
 
   els.btnZoomIn.addEventListener("click", (evt) => {
@@ -3009,8 +3409,11 @@ function wireToolbar() {
   if (els.selMode) {
     const modeLabel = els.selMode.previousElementSibling;
     if (modeLabel && modeLabel.classList.contains("lbl")) {
+      modeLabel.title = "モード切替は廃止され、常時双方向同期になっています。";
       modeLabel.style.display = "none";
     }
+    els.selMode.disabled = true;
+    els.selMode.title = "モード切替は廃止され、常時双方向同期になっています。";
     els.selMode.style.display = "none";
   }
 
@@ -3066,8 +3469,10 @@ function wireToolbar() {
 
   if (els.btnApplyText) {
     els.btnApplyText.addEventListener("click", async () => {
-      const ok = await renderFromText({ live: false });
-      if (ok) addDocSnapshot("apply");
+      await withTask("applying text...", async () => {
+        const ok = await renderFromText({ live: false });
+        if (ok) addDocSnapshot("apply");
+      });
     });
   }
 
@@ -3091,6 +3496,10 @@ function wireToolbar() {
     els.toggleDevMode.addEventListener("change", () => {
       state.devMode = els.toggleDevMode.checked;
       localStorage.setItem("ae:devMode", state.devMode ? "1" : "0");
+      if (!state.devMode && state.statusDetailsOpen) {
+        state.statusDetailsOpen = false;
+        localStorage.setItem("ae:statusDetailsOpen", "0");
+      }
       if (!state.devMode && state.showInternalBlocks) {
         state.showInternalBlocks = false;
         if (els.toggleInternalBlocks) els.toggleInternalBlocks.checked = false;
@@ -3116,7 +3525,7 @@ function wireToolbar() {
           return `${i + 1}: ${d.toLocaleString()} (${h.reason || "snapshot"})`;
         })
         .join("\n");
-      const picked = window.prompt(`復元する履歴番号を入力してください:\n${choices}`, "1");
+      const picked = await requestTextInput(`復元する履歴番号を入力してください:\n${choices}`, "1");
       const idx = Number.parseInt(picked || "", 10) - 1;
       if (!Number.isInteger(idx) || idx < 0 || idx >= state.docHistory.length) return;
       const item = state.docHistory[idx];
@@ -3126,6 +3535,66 @@ function wireToolbar() {
       await renderFromText({ live: false });
     });
   }
+
+}
+
+function wireNativeMenuActions() {
+  if (state.nativeMenuWired) return;
+  if (!window.api?.onMenuAction) return;
+  state.nativeMenuWired = true;
+  const actionToDomId = {
+    "file:new": "btnNew",
+    "file:open": "btnOpen",
+    "file:save": "btnSave",
+    "file:saveAs": "btnSaveAs",
+    "file:restoreSnapshot": "btnRestoreSnapshot",
+    "file:exportSvg": "btnExportSvg",
+    "file:exportMermaid": "btnExportMermaid",
+    "file:exportPng": "btnExportPng",
+    "file:exportPdf": "btnExportPdf",
+    "file:exportModelJson": "btnExportModelJson",
+    "edit:undo": "btnUndo",
+    "edit:redo": "btnRedo",
+    "edit:format": "btnFormat",
+    "diagram:relayout": "btnRelayout",
+    "view:zoomIn": "btnZoomIn",
+    "view:zoomOut": "btnZoomOut",
+    "view:zoomReset": "btnZoomReset",
+    "view:zoomFit": "btnZoomFit",
+    "view:panReset": "btnPanReset",
+    "view:toggleConnect": "btnConnect",
+    "view:toggleDevMode": "toggleDevMode",
+    "view:toggleInternal": "toggleInternalBlocks",
+    "view:toggleProblems": "btnToggleProblems",
+    "pane:collapseLeft": "btnCollapseLeft",
+    "pane:collapseRight": "btnCollapseRight",
+    "pane:expandLeft": "btnExpandLeft",
+    "pane:expandRight": "btnExpandRight",
+    "help:copyDiagnostics": "btnCopyDiagnostics"
+  };
+  window.api.onMenuAction((action) => {
+    const direct = state.menuHandlers?.[action];
+    if (typeof direct === "function") {
+      void direct();
+      return;
+    }
+    const id = actionToDomId[action];
+    if (!id) {
+      console.warn("[renderer] unmapped menu action:", action);
+      return;
+    }
+    const el = document.getElementById(id);
+    if (!el) {
+      console.warn("[renderer] missing menu target:", action, id);
+      return;
+    }
+    if (el.tagName === "INPUT" && el.type === "checkbox") {
+      el.checked = !el.checked;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  });
 }
 
 function wirePreviewZoom() {
@@ -3196,6 +3665,12 @@ function wireContextMenu() {
   if (!wrap || !els.ctxMenu) return;
 
   const hide = () => closeContextMenu();
+  els.ctxMenu.addEventListener("pointerdown", (evt) => {
+    evt.stopPropagation();
+  });
+  els.ctxMenu.addEventListener("click", (evt) => {
+    evt.stopPropagation();
+  });
   window.addEventListener("click", hide);
   window.addEventListener(
     "scroll",
@@ -3306,6 +3781,51 @@ function wireContextMenu() {
             }
           }
         ]);
+        const zoneItems = [
+          {
+            label: "ゾーン解除",
+            onClick: () => {
+              node.boundaryId = null;
+              node.groupId = null;
+              node.groupName = null;
+              renderFromModel();
+              pushHistory();
+              markModelDirty("zone cleared");
+            }
+          },
+          {
+            label: "新規ゾーン作成...",
+            onClick: () => {
+              void requestTextInput("Zone name", "New Zone").then((label) => {
+                if (!label) return;
+                const roleId = "vpc";
+                const ids = new Set(state.model.boundaries.map((b) => b.id));
+                const id = nextId(boundaryPrefix(roleId), ids);
+                state.model.boundaries.push({ id, label: label.trim(), role: roleId });
+                node.boundaryId = id;
+                node.groupId = id;
+                node.groupName = label.trim();
+                renderFromModel();
+                pushHistory();
+                markModelDirty("zone created");
+              });
+            }
+          }
+        ];
+        for (const b of state.model.boundaries) {
+          zoneItems.push({
+            label: `${b.label} (${b.id})`,
+            onClick: () => {
+              node.boundaryId = b.id;
+              node.groupId = b.id;
+              node.groupName = b.label;
+              renderFromModel();
+              pushHistory();
+              markModelDirty("zone assignment changed");
+            }
+          });
+        }
+        addCtxGroup(menu, "ゾーン", zoneItems);
         addCtxItem(menu, node.pinned ? "Unpin" : "Pin", () => {
           node.pinned = !node.pinned;
           if (!node.pinned) {
@@ -3370,41 +3890,61 @@ function wireSplitters() {
   const problemSplitter = document.querySelector('.hsplitter[data-split="problems"]');
   if (!leftSplitter || !rightSplitter || !els.layout) return;
 
-  const startDrag = (side, evt) => {
+  const startDrag = (side, splitterEl, evt) => {
+    if (evt.button !== 0) return;
     evt.preventDefault();
+    evt.stopPropagation();
     document.body.classList.add("dragging");
     const rect = els.layout.getBoundingClientRect();
     const splitterW = 12;
-    const gap = 0;
-    const minLeft = 240;
-    const minRight = 360;
-    const minCenter = 480;
+    const minLeft = 220;
+    const minRight = 300;
+    const minCenter = 360;
+    const available = Math.max(320, rect.width - splitterW * 2);
+    const maxLeft = Math.max(minLeft + 24, available - minRight - minCenter);
+    const maxRight = Math.max(minRight + 24, available - minLeft - minCenter);
+    let pointerId = evt.pointerId;
+
+    try {
+      if (splitterEl && splitterEl.setPointerCapture != null && pointerId != null) {
+        splitterEl.setPointerCapture(pointerId);
+      }
+    } catch {}
+
     const onMove = (e) => {
+      if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
       if (side === "left") {
-        const maxLeft = rect.width - minRight - minCenter - splitterW * 2 - gap * 4;
         const left = clamp(e.clientX - rect.left, minLeft, maxLeft);
         applyPaneSizes(left, null);
       } else {
-        const maxRight = rect.width - minLeft - minCenter - splitterW * 2 - gap * 4;
         const right = clamp(rect.right - e.clientX, minRight, maxRight);
         applyPaneSizes(null, right);
       }
     };
     const onUp = (e) => {
+      if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
       document.body.classList.remove("dragging");
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      try {
+        if (splitterEl && splitterEl.releasePointerCapture != null && pointerId != null) {
+          splitterEl.releasePointerCapture(pointerId);
+        }
+      } catch {}
+      pointerId = null;
       const styles = getComputedStyle(document.documentElement);
       const left = parseFloat(styles.getPropertyValue("--left-w")) || 260;
       const right = parseFloat(styles.getPropertyValue("--right-w")) || 420;
       savePaneSizes(left, right);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
-  leftSplitter.addEventListener("mousedown", (evt) => startDrag("left", evt));
-  rightSplitter.addEventListener("mousedown", (evt) => startDrag("right", evt));
+  leftSplitter.addEventListener("pointerdown", (evt) => startDrag("left", leftSplitter, evt));
+  rightSplitter.addEventListener("pointerdown", (evt) => startDrag("right", rightSplitter, evt));
 
   if (problemSplitter) {
     problemSplitter.addEventListener("mousedown", (evt) => {
@@ -3684,6 +4224,11 @@ async function boot() {
   const dev = localStorage.getItem("ae:devMode");
   if (dev) state.devMode = dev === "1";
   if (els.toggleDevMode) els.toggleDevMode.checked = state.devMode;
+  const statusDetailsOpen = localStorage.getItem("ae:statusDetailsOpen");
+  state.statusDetailsOpen = statusDetailsOpen === "1";
+  const inspectorVisible = localStorage.getItem("ae:inspectorVisible");
+  state.inspectorVisible = inspectorVisible === "1";
+  applyInspectorVisibility();
   if (els.internalPanel) {
     const open = localStorage.getItem("ae:internalPanelOpen");
     if (open === "0") els.internalPanel.open = false;
@@ -3704,13 +4249,26 @@ async function boot() {
   setFileInfo();
   applyZoom();
   updateDprStatus();
-  window.addEventListener("resize", updateDprStatus);
+  const onViewportScaleChanged = debounce(() => {
+    updateDprStatus();
+    void syncAutoUiScaleIfNeeded();
+  }, 120);
+  window.addEventListener("resize", onViewportScaleChanged);
+  window.addEventListener("focus", onViewportScaleChanged);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) onViewportScaleChanged();
+  });
   const diag = await updateDiagnostics();
   if (els.selUiScale) {
     const pref = normalizeUiScaleChoice((diag && diag.uiScalePref) || "auto") || "auto";
     els.selUiScale.value = pref;
     try {
       await applyUiZoom(pref, diag);
+      if (pref === "auto") {
+        const dpr = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+        const scale = Math.round((Number(diag?.displayScale) || 1) * 100) / 100;
+        state.lastAutoScaleKey = `${dpr}|${scale}`;
+      }
     } catch (err) {
       if (els.statusWarn) els.statusWarn.textContent = `warn:${err?.message || "ui scale apply failed"}`;
     }
@@ -3724,12 +4282,14 @@ async function boot() {
   setInspectorHeader("Inspector", "Select", "muted");
 
   wireToolbar();
+  wireNativeMenuActions();
   wireModelControls();
   wirePreviewZoom();
   wireContextMenu();
   wireSplitters();
   wireKeys();
   wireNewDialog();
+  wireExportDialog();
 
   const firstRunKey = "ae:firstRunDone";
   if (!localStorage.getItem(firstRunKey)) {

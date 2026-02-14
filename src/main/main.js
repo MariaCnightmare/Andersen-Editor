@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, dialog, screen, clipboard } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, screen, clipboard, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { installAppMenu, wireMenuStateIpc } = require("./appMenu");
 const { summarizeGpuStatus, summarizeGpuInfo, formatDiagnosticsText } = require("./gpuDiagnostics");
 
 let mainWindow = null;
+const isWsl = !!(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
 
 app.commandLine.appendSwitch("high-dpi-support", "1");
 
@@ -20,10 +21,12 @@ let diagInfo = {
   warning: null,
   ozoneEnabled: false,
   ozoneHint: null,
+  ozoneDecision: null,
+  isWsl,
+  envOzoneHint: process.env.ELECTRON_OZONE_PLATFORM_HINT || "",
   uiScalePref: null
 };
 
-const isWsl = !!(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
 const disableGpuByEnv = process.env.AE_DISABLE_GPU === "1";
 if (disableGpuByEnv) {
   app.disableHardwareAcceleration();
@@ -114,7 +117,32 @@ if (!envOzoneHint && prefOzone && !parsedPrefOzone) {
 }
 const forceAuto = process.env.AE_OZONE_AUTO === "1";
 const autoOzone = diagInfo.envWaylandDisplay && (!diagInfo.envDisplay || forceAuto) ? "auto" : null;
-const ozoneHint = parsedEnvOzone || (envOzone ? "auto" : null) || parsedPrefOzone || autoOzone || null;
+const wslDefaultOzone = isWsl ? "x11" : null;
+const resolvedByEnv = !!parsedEnvOzone;
+const resolvedByAeEnv = !resolvedByEnv && !!envOzone;
+const resolvedByPref = !resolvedByEnv && !resolvedByAeEnv && !!parsedPrefOzone;
+const resolvedByAuto = !resolvedByEnv && !resolvedByAeEnv && !resolvedByPref && !!autoOzone;
+const resolvedByWsl = !resolvedByEnv && !resolvedByAeEnv && !resolvedByPref && !resolvedByAuto && !!wslDefaultOzone;
+const ozoneHint =
+  parsedEnvOzone || (envOzone ? "auto" : null) || parsedPrefOzone || autoOzone || wslDefaultOzone || null;
+const ozoneReason = resolvedByEnv
+  ? "env"
+  : resolvedByAeEnv
+    ? "ae_env"
+    : resolvedByPref
+      ? "config"
+      : resolvedByAuto
+        ? "fallback_auto"
+        : resolvedByWsl
+          ? "wsl_decorations_default"
+          : "none";
+diagInfo.ozoneDecision = {
+  resolved: ozoneHint || "off",
+  reason: ozoneReason,
+  envHint: envOzoneHint || "",
+  prefHint: prefOzone || "",
+  wsl: isWsl
+};
 
 if (ozoneHint) {
   app.commandLine.appendSwitch("enable-features", "UseOzonePlatform");
@@ -148,6 +176,9 @@ function createWindow() {
     width: 1400,
     height: 860,
     backgroundColor: simpleUi ? "#ffffff" : "#0b0f16",
+    frame: true,
+    titleBarStyle: "default",
+    autoHideMenuBar: process.platform !== "darwin",
     webPreferences: {
       contextIsolation: !simpleUi,
       nodeIntegration: simpleUi,
@@ -159,6 +190,10 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "..", "renderer", "simple.html"));
   } else {
     mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  }
+
+  if (process.platform !== "darwin") {
+    mainWindow.setMenuBarVisibility(false);
   }
 
   if (process.env.AE_DEVTOOLS === "1") {
@@ -221,7 +256,9 @@ function createWindow() {
     mainWindow = null;
   });
 
-  if (!simpleUi) {
+  const maximizeOpt = String(process.env.AE_MAXIMIZE_ON_START || "").trim();
+  const shouldMaximize = maximizeOpt ? maximizeOpt === "1" : !isWsl;
+  if (!simpleUi && shouldMaximize) {
     mainWindow.maximize();
   }
 }
@@ -280,7 +317,9 @@ ipcMain.handle("diag:getInfo", async () => {
     diagInfo.zoomFactor = await win.webContents.getZoomFactor();
   } catch {}
   try {
-    diagInfo.displayScale = screen.getPrimaryDisplay().scaleFactor;
+    const win = ensureWindow();
+    const display = screen.getDisplayMatching(win.getBounds());
+    diagInfo.displayScale = (display && display.scaleFactor) || screen.getPrimaryDisplay().scaleFactor;
   } catch {}
   const gpu = await collectGpuDiagnostics(false);
   return {
@@ -307,7 +346,8 @@ ipcMain.handle("diag:copyToClipboard", async () => {
       diagInfo.zoomFactor = await win.webContents.getZoomFactor();
     } catch {}
     try {
-      diagInfo.displayScale = screen.getPrimaryDisplay().scaleFactor;
+      const display = screen.getDisplayMatching(win.getBounds());
+      diagInfo.displayScale = (display && display.scaleFactor) || screen.getPrimaryDisplay().scaleFactor;
     } catch {}
     const gpu = await collectGpuDiagnostics(true);
     const text = formatDiagnosticsText(diagInfo, gpu);
@@ -317,6 +357,7 @@ ipcMain.handle("diag:copyToClipboard", async () => {
     return { ok: false, error: err?.message || "copy diagnostics failed" };
   }
 });
+
 
 ipcMain.handle("config:setUiScale", async (_evt, value) => {
   try {
@@ -449,6 +490,165 @@ ipcMain.handle("fs:saveMmd", async (_evt, args) => {
   if (!filePath) return { ok: false, error: "filePath is empty" };
   fs.writeFileSync(filePath, content ?? "", "utf-8");
   return { ok: true };
+});
+
+function timestampToken() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
+
+function extensionForFormat(format) {
+  if (format === "svg") return ".svg";
+  if (format === "png") return ".png";
+  if (format === "pdf") return ".pdf";
+  if (format === "modelJson") return ".json";
+  return ".mmd";
+}
+
+function normalizePathForFormat(filePath, format) {
+  const ext = extensionForFormat(format);
+  const normalized = String(filePath || "").trim();
+  if (!normalized) return "";
+  const hasSepSuffix = /[\\/]$/.test(normalized);
+  let out = normalized;
+  if (hasSepSuffix || (fs.existsSync(out) && fs.statSync(out).isDirectory())) {
+    out = path.join(out, `andersen-export-${timestampToken()}${ext}`);
+  } else if (!out.toLowerCase().endsWith(ext)) {
+    out += ext;
+  }
+  return out;
+}
+
+ipcMain.handle("dialog:chooseExportPath", async (_evt, args) => {
+  try {
+    const win = ensureWindow();
+    const rawFormat = String(args?.format || "mermaid").toLowerCase();
+    const format =
+      rawFormat === "svg"
+        ? "svg"
+        : rawFormat === "png"
+          ? "png"
+          : rawFormat === "pdf"
+            ? "pdf"
+            : rawFormat === "modeljson"
+              ? "modelJson"
+              : "mermaid";
+    const requestedPath = String(args?.filePath || "").trim();
+    const ext = extensionForFormat(format);
+    const defaultPath = normalizePathForFormat(requestedPath || `diagram${ext}`, format);
+    const filters =
+      format === "svg"
+        ? [{ name: "SVG", extensions: ["svg"] }]
+        : format === "png"
+          ? [{ name: "PNG", extensions: ["png"] }]
+          : format === "pdf"
+            ? [{ name: "PDF", extensions: ["pdf"] }]
+            : format === "modelJson"
+              ? [{ name: "JSON", extensions: ["json"] }]
+              : [
+                  { name: "Mermaid", extensions: ["mmd", "mermaid"] },
+                  { name: "All Files", extensions: ["*"] }
+                ];
+
+    const result = await dialog.showSaveDialog(win, {
+      title:
+        format === "svg"
+          ? "SVGとしてエクスポート"
+          : format === "png"
+            ? "PNGとしてエクスポート"
+            : format === "pdf"
+              ? "PDFとしてエクスポート"
+              : format === "modelJson"
+                ? "MODEL(JSON)としてエクスポート"
+                : "Mermaidとしてエクスポート",
+      defaultPath,
+      filters
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    return { ok: true, filePath: normalizePathForFormat(result.filePath, format) };
+  } catch (err) {
+    return { ok: false, error: err?.message || "choose export path failed" };
+  }
+});
+
+ipcMain.handle("export:writeFile", async (_evt, args) => {
+  try {
+    const format = String(args?.format || "mermaid").toLowerCase() === "svg" ? "svg" : "mermaid";
+    const filePath = normalizePathForFormat(args?.filePath, format);
+    const content = String(args?.content || "");
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+    if (!content) return { ok: false, error: "export content is empty." };
+    fs.writeFileSync(filePath, content, "utf-8");
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err?.message || "export write failed" };
+  }
+});
+
+ipcMain.handle("export:writePngFile", async (_evt, args) => {
+  try {
+    const filePath = normalizePathForFormat(args?.filePath, "png");
+    const pngBase64 = String(args?.pngBase64 || "");
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+    if (!pngBase64) return { ok: false, error: "pngBase64 is empty." };
+    const base64 = pngBase64.replace(/^data:image\/png;base64,/, "");
+    fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err?.message || "export png write failed" };
+  }
+});
+
+ipcMain.handle("export:writePdfFile", async (_evt, args) => {
+  try {
+    const win = ensureWindow();
+    const filePath = normalizePathForFormat(args?.filePath, "pdf");
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+
+    await win.webContents.executeJavaScript(`document.body.classList.add("printing")`);
+    await new Promise((r) => setTimeout(r, 60));
+    const pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      marginsType: 0,
+      pageSize: "A4"
+    });
+    await win.webContents.executeJavaScript(`document.body.classList.remove("printing")`);
+
+    fs.writeFileSync(filePath, pdfBuffer);
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err?.message || "export pdf write failed" };
+  }
+});
+
+ipcMain.handle("export:writeModelJsonFile", async (_evt, args) => {
+  try {
+    const filePath = normalizePathForFormat(args?.filePath, "modelJson");
+    const modelJson = String(args?.modelJson || "");
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+    if (!modelJson) return { ok: false, error: "modelJson is empty." };
+    fs.writeFileSync(filePath, modelJson, "utf-8");
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err?.message || "export model json write failed" };
+  }
+});
+
+ipcMain.handle("shell:showItemInFolder", async (_evt, args) => {
+  try {
+    const filePath = String(args?.filePath || "").trim();
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+    shell.showItemInFolder(filePath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || "open folder failed" };
+  }
 });
 
 // --- Export SVG/PNG/PDF ---
