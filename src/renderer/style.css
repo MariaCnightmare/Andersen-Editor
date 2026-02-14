@@ -242,10 +242,30 @@ body.dragging {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 6px;
+  padding: 4px 7px;
   border: 1px solid var(--border-1);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface-2) 80%, transparent 20%);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent 30%);
+}
+
+.toolbarCenter .group .btn {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.toolbarCenter .group .btn:hover {
+  background: color-mix(in srgb, var(--surface-2) 86%, white 14%);
+  border-color: var(--border-2);
+}
+
+.toolbarCenter .group .btn:focus-visible {
+  border-color: var(--border-3);
+}
+
+.toolbarCenter .group .btn.btnPrimary {
+  background: color-mix(in srgb, var(--accent-1) 22%, var(--surface-2) 78%);
+  border-color: color-mix(in srgb, var(--accent-1) 52%, var(--border-1) 48%);
 }
 
 /* Menu */
@@ -361,10 +381,10 @@ body.dragging {
 
 .taskProgress {
   margin-top: 4px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   border-radius: 8px;
   padding: 4px 6px;
-  background: rgba(255,255,255,.03);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent 28%);
 }
 
 .taskProgress.hidden {
@@ -458,7 +478,7 @@ body.dragging {
 
 /* Inspector（右ペインの上部） */
 .inspector {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-1);
   height: auto;
   overflow: hidden;
   display: flex;
@@ -475,7 +495,7 @@ body.dragging {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-1);
   gap: 8px;
 }
 
@@ -492,8 +512,8 @@ body.dragging {
   flex: 0 0 auto;             /* 内容に応じて伸縮 */
   min-height: 0;              /* 空なら0に落とす */
   max-height: none;
-  border-top: 1px solid var(--border);
-  background: rgba(255,255,255,.02);
+  border-top: 1px solid var(--border-1);
+  background: color-mix(in srgb, var(--surface-2) 68%, transparent 32%);
   overflow: auto;
 }
 
@@ -547,9 +567,9 @@ body.inspector-hidden .inlineInspector {
 }
 
 .internalPanel {
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background: rgba(255,255,255,.02);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent 40%);
   padding: 0;
 }
 
@@ -581,15 +601,15 @@ body.inspector-hidden .inlineInspector {
 .hsplitter {
   height: 8px;
   cursor: row-resize;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,.03);
+  border-top: 1px solid var(--border-1);
+  border-bottom: 1px solid var(--border-1);
+  background: color-mix(in srgb, var(--surface-2) 65%, transparent 35%);
   z-index: 5;
 }
 
 .problems {
-  border-top: 1px solid var(--border);
-  background: rgba(255,255,255,.02);
+  border-top: 1px solid var(--border-1);
+  background: color-mix(in srgb, var(--surface-2) 66%, transparent 34%);
   height: var(--problems-h);
   min-height: 0;
   overflow: hidden;
@@ -599,7 +619,7 @@ body.inspector-hidden .inlineInspector {
   padding: 4px 8px;
   font-size: var(--text-sm);
   color: var(--muted);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-1);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -612,8 +632,8 @@ body.inspector-hidden .inlineInspector {
 }
 
 .problemItem {
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-1);
   cursor: pointer;
 }
 .problemItem:hover {
@@ -625,7 +645,7 @@ body.inspector-hidden .inlineInspector {
   margin-right: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   font-size: 10px;
 }
 
@@ -651,15 +671,15 @@ body.inspector-hidden .inlineInspector {
   height: 100%;
   flex: 1 1 auto;
   resize: none;
-  background: #0a111a;
+  background: color-mix(in srgb, var(--surface-2) 85%, black 15%);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   border-radius: var(--radius);
   outline: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  padding: 8px;
+  font-size: 13px;
+  line-height: 1.62;
+  padding: 10px;
 }
 .editorFallback:focus-visible {
   box-shadow: var(--focus);
@@ -669,21 +689,22 @@ body.inspector-hidden .inlineInspector {
 .editor {
   height: 100%;
   flex: 1 1 auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   border-radius: var(--radius);
   overflow: hidden;
-  background: #0a111a;
+  background: color-mix(in srgb, var(--surface-2) 85%, black 15%);
 }
 
 .CodeMirror {
   height: 100%;
-  font-size: 12px;
-  background: #0a111a;
+  font-size: 13px;
+  line-height: 1.6;
+  background: color-mix(in srgb, var(--surface-2) 85%, black 15%);
   color: var(--text);
 }
 .CodeMirror-gutters {
-  background: #0a111a;
-  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 85%, black 15%);
+  border-right: 1px solid var(--border-1);
   color: var(--muted);
 }
 
@@ -734,7 +755,7 @@ body.connect-mode #previewWrap {
   background: color-mix(in srgb, var(--surface-2) 76%, transparent 24%);
   margin-bottom: 0;
   align-self: flex-start;
-  box-shadow: var(--shadow-1);
+  box-shadow: none;
 }
 @supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
   .previewZoom {
@@ -888,7 +909,7 @@ body.problems-collapsed .problemsList {
   transform: translateX(-50%);
   background: rgba(15, 22, 36, 0.95);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   padding: 8px 12px;
   border-radius: 10px;
   font-size: 12px;
@@ -905,7 +926,7 @@ body.problems-collapsed .problemsList {
   min-width: 220px;
   max-width: 320px;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   border-radius: 10px;
   background: rgba(10, 17, 26, 0.96);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
@@ -935,7 +956,7 @@ body.problems-collapsed .problemsList {
   text-align: left;
   background: var(--btn);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   border-radius: 8px;
   padding: 6px 8px;
   cursor: pointer;
@@ -952,7 +973,7 @@ body.problems-collapsed .problemsList {
 
 .contextMenu .ctxGroup {
   position: relative;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   border-radius: 8px;
   background: rgba(255,255,255,.02);
   overflow: visible;
@@ -982,7 +1003,7 @@ body.problems-collapsed .problemsList {
   display: none;
   gap: 4px;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   border-radius: 8px;
   background: rgba(10, 17, 26, 0.96);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
@@ -1125,13 +1146,13 @@ body:not(.right-collapsed) .edgeBtn.right {
 /* Blocks / lists */
 .block {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-1);
 }
 
 .addCard {
-  border: 1px solid var(--border-1);
+  border: 1px solid transparent;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-2) 74%, var(--accent-1) 26%);
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent 12%);
   box-shadow: none;
   border-bottom: none;
 }
@@ -1174,9 +1195,9 @@ body:not(.right-collapsed) .edgeBtn.right {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border-radius: 10px;
-  border: 1px solid var(--border-1);
+  border: 1px solid transparent;
   background: color-mix(in srgb, var(--surface-2) 72%, transparent 28%);
   cursor: pointer;
   transition: background var(--t-fast) ease, border-color var(--t-fast) ease, transform var(--t-fast) ease;
@@ -1190,11 +1211,12 @@ body:not(.right-collapsed) .edgeBtn.right {
 }
 
 .item .tag {
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 11px;
+  border: 1px solid color-mix(in srgb, var(--border-1) 70%, transparent 30%);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 500;
 }
 .item .name {
   flex: 1;
@@ -1221,9 +1243,9 @@ body:not(.right-collapsed) .edgeBtn.right {
   margin-right: 6px;
 }
 .item .btnMini {
-  padding: 6px 8px;
+  padding: 5px 7px;
   border-radius: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-1);
   background: var(--btn);
   color: var(--text);
   cursor: pointer;

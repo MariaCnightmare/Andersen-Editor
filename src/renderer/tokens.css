@@ -7,7 +7,7 @@
   --text-2: #aeb9c9;
   --text-3: #8694a8;
 
-  --border-1: rgba(255, 255, 255, 0.08);
+  --border-1: rgba(255, 255, 255, 0.06);
   --border-2: rgba(255, 255, 255, 0.16);
   --border-3: rgba(91, 171, 255, 0.7);
 
@@ -28,8 +28,8 @@
   --sp-12: 12px;
   --sp-16: 16px;
 
-  --shadow-1: 0 8px 20px rgba(0, 0, 0, 0.22);
-  --shadow-2: 0 16px 28px rgba(0, 0, 0, 0.28);
+  --shadow-1: 0 8px 18px rgba(0, 0, 0, 0.2);
+  --shadow-2: 0 14px 24px rgba(0, 0, 0, 0.26);
   --glow-accent: 0 0 0 2px rgba(91, 171, 255, 0.22);
 
   --t-fast: 120ms;
