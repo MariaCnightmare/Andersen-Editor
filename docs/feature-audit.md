@@ -21,14 +21,17 @@
 | Text-first mode when AE:MODEL missing | `docs/SPEC.md:18-19` | Implemented | `src/renderer/renderer.js:2150` | Keep |
 | Preview drag position -> Mermaid reflection | User priority item | Partial | Drag/pin exists: `src/renderer/renderer.js:1969`; reflected via `%%AE:MODEL`: `src/core/generateMermaid.js:53`; no pure Mermaid positional syntax | Keep as current design (IR + AE:MODEL) |
 | Edge add/rewire -> Mermaid reflection | User priority item | Implemented | Add edge: `src/renderer/renderer.js:2684`; connect rewire: `src/renderer/renderer.js:2031`; Mermaid output: `src/core/generateMermaid.js:95` | Keep |
-| Zone/group setting -> Mermaid reflection | User priority item | Implemented | Boundary add: `src/renderer/renderer.js:2673`; subgraph output: `src/core/generateMermaid.js:67` | Keep |
+| Zone/group setting -> Mermaid reflection | User priority item | Implemented | Boundary add: `src/renderer/renderer.js:2690`; node zone assign/edit: `src/renderer/renderer.js:1681`; subgraph output: `src/core/generateMermaid.js:67` | Keep |
+| Export Mermaid (.mmd/.md/.txt) | User priority item | Implemented (MVP added) | IPC: `src/main/main.js:413`; preload API: `src/main/preload.js:13`; UI/menu: `src/renderer/index.html:75`, `src/main/appMenu.js:62`; handler: `src/renderer/renderer.js:2281` | Keep |
 | Export JSON(MODEL) | User priority item | Implemented (MVP added) | IPC: `src/main/main.js:451`; preload API: `src/main/preload.js:13`; UI: `src/renderer/index.html:79`; handler: `src/renderer/renderer.js:2294` | Keep |
 
 ## Notes on Priority-4 Verification
 - `Preview drag position -> Mermaid`: Mermaid Flowchart itself has no official node-position syntax.  
   Current behavior is consistent with spec section "IR is source of truth" and "AE:MODEL round-trip".  
   Therefore status is `Partial` only if expecting pure-Mermaid positional persistence.
-- Missing item chosen for MVP implementation: `Export JSON(MODEL)`.
+- Phase2 MVP status:
+  - Node drag persists to `pinnedOffset/position` and is embedded into `%%AE:MODEL`.
+  - Dirty status is set after drag/edge/zone mutations (`markModelDirty`).
 
 ## Mermaid Stability Delta (This change set)
 - Class name normalization introduced:

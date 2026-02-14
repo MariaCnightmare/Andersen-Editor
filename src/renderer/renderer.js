@@ -103,6 +103,7 @@ const els = {
   btnOpen: $("btnOpen"),
   btnSave: $("btnSave"),
   btnSaveAs: $("btnSaveAs"),
+  btnExportMermaid: $("btnExportMermaid"),
   btnExportSvg: $("btnExportSvg"),
   btnExportPng: $("btnExportPng"),
   btnExportPdf: $("btnExportPdf"),
@@ -238,6 +239,13 @@ function showWarning(msg) {
 
 function setFileInfo() {
   els.fileInfo.textContent = state.filePath ? state.filePath : "未保存";
+}
+
+function markModelDirty(reason = "model changed") {
+  if (state.mode !== "text") {
+    setStatus("dirty", "dirty");
+    setStatusReason(reason);
+  }
 }
 
 function clamp(val, min, max) {
@@ -1075,7 +1083,9 @@ function parseMermaidToModel(text) {
         label: label || id,
         role: shapeToRole.get(shape) || "server",
         shape: shape || "rect",
-        boundaryId: boundaryStack.length ? boundaryStack[boundaryStack.length - 1].id : null
+        boundaryId: boundaryStack.length ? boundaryStack[boundaryStack.length - 1].id : null,
+        groupId: boundaryStack.length ? boundaryStack[boundaryStack.length - 1].id : null,
+        groupName: boundaryStack.length ? boundaryStack[boundaryStack.length - 1].label : null
       });
     } else if (label) {
       nodes.get(id).label = label;
@@ -1233,7 +1243,14 @@ function parseMermaidToModel(text) {
 
 function normalizeModelClassNames(model) {
   if (!model || !Array.isArray(model.nodes)) return model;
-  model.nodes.forEach((n) => normalizeNodeClassName(n));
+  const byBoundary = new Map((model.boundaries || []).map((b) => [b.id, b]));
+  model.nodes.forEach((n) => {
+    normalizeNodeClassName(n);
+    const bid = n.boundaryId || n.groupId || null;
+    n.boundaryId = bid;
+    n.groupId = bid;
+    n.groupName = bid && byBoundary.has(bid) ? byBoundary.get(bid).label : null;
+  });
   return model;
 }
 
@@ -1621,6 +1638,49 @@ function renderPropPanel() {
     rowShape.appendChild(shapeLabel);
     rowShape.appendChild(shapeSelect);
 
+    const rowZone = document.createElement("div");
+    rowZone.className = "propRow";
+    const zoneLabel = document.createElement("div");
+    zoneLabel.className = "propLabel";
+    zoneLabel.textContent = "Zone";
+    const zoneRow = document.createElement("div");
+    zoneRow.className = "row";
+    const zoneSelect = document.createElement("select");
+    zoneSelect.className = "select wide";
+    zoneSelect.disabled = isHover;
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "";
+    noneOpt.textContent = "(none)";
+    zoneSelect.appendChild(noneOpt);
+    for (const b of state.model.boundaries) {
+      const opt = document.createElement("option");
+      opt.value = b.id;
+      opt.textContent = `${b.label} (${b.id})`;
+      if ((node.boundaryId || node.groupId || "") === b.id) opt.selected = true;
+      zoneSelect.appendChild(opt);
+    }
+    const btnNewZone = document.createElement("button");
+    btnNewZone.className = "btn";
+    btnNewZone.textContent = "New Zone";
+    btnNewZone.disabled = isHover;
+    zoneRow.appendChild(zoneSelect);
+    zoneRow.appendChild(btnNewZone);
+    rowZone.appendChild(zoneLabel);
+    rowZone.appendChild(zoneRow);
+
+    const rowZoneName = document.createElement("div");
+    rowZoneName.className = "propRow";
+    const zoneNameLabel = document.createElement("div");
+    zoneNameLabel.className = "propLabel";
+    zoneNameLabel.textContent = "Zone Name";
+    const zoneNameInput = document.createElement("input");
+    zoneNameInput.className = "input wide";
+    const currentBoundary = state.model.boundaries.find((b) => b.id === (node.boundaryId || node.groupId));
+    zoneNameInput.value = currentBoundary?.label || "";
+    zoneNameInput.disabled = isHover || !currentBoundary;
+    rowZoneName.appendChild(zoneNameLabel);
+    rowZoneName.appendChild(zoneNameInput);
+
     const rowColor = document.createElement("div");
     rowColor.className = "propRow";
     const colorLabel = document.createElement("div");
@@ -1672,6 +1732,8 @@ function renderPropPanel() {
       inspectorBody.appendChild(rowComment);
       inspectorBody.appendChild(rowRole);
       inspectorBody.appendChild(rowShape);
+      inspectorBody.appendChild(rowZone);
+      inspectorBody.appendChild(rowZoneName);
       inspectorBody.appendChild(rowColor);
       inspectorBody.appendChild(rowPinned);
     }
@@ -1684,11 +1746,53 @@ function renderPropPanel() {
       node.shape = shapeVal || null;
       renderFromModel();
       pushHistory();
+      markModelDirty("node property changed");
     }, 300);
     labelInput.addEventListener("input", update);
     commentInput.addEventListener("input", update);
     roleSelect.addEventListener("change", update);
     shapeSelect.addEventListener("change", update);
+
+    zoneSelect.addEventListener("change", () => {
+      const bid = zoneSelect.value || null;
+      node.boundaryId = bid;
+      node.groupId = bid;
+      const b = bid ? state.model.boundaries.find((x) => x.id === bid) : null;
+      node.groupName = b?.label || null;
+      renderFromModel();
+      pushHistory();
+      markModelDirty("zone assignment changed");
+    });
+
+    btnNewZone.addEventListener("click", () => {
+      const label = window.prompt("Zone name", "New Zone");
+      if (!label) return;
+      const roleId = "vpc";
+      const ids = new Set(state.model.boundaries.map((b) => b.id));
+      const id = nextId(boundaryPrefix(roleId), ids);
+      state.model.boundaries.push({ id, label: label.trim(), role: roleId });
+      node.boundaryId = id;
+      node.groupId = id;
+      node.groupName = label.trim();
+      renderFromModel();
+      pushHistory();
+      markModelDirty("zone created");
+    });
+
+    zoneNameInput.addEventListener(
+      "input",
+      debounce(() => {
+        const bid = node.boundaryId || node.groupId;
+        if (!bid) return;
+        const b = state.model.boundaries.find((x) => x.id === bid);
+        if (!b) return;
+        b.label = zoneNameInput.value || b.label;
+        node.groupName = b.label;
+        renderFromModel();
+        pushHistory();
+        markModelDirty("zone name changed");
+      }, 300)
+    );
   } else {
     const edge = state.model.edges.find((e) => e.id === target.id);
     if (!edge) return;
@@ -2035,6 +2139,7 @@ function attachNodeInteractions(svg) {
             edge.to = toId;
             pushHistory();
             renderFromModel();
+            markModelDirty("edge rewired");
           }
         } else {
           const ids = new Set(state.model.edges.map((e) => e.id));
@@ -2043,6 +2148,7 @@ function attachNodeInteractions(svg) {
           state.model.edges.push({ id, from: connectDrag.fromId, to: toId, kind, label: "" });
           pushHistory();
           renderFromModel();
+          markModelDirty("edge added");
         }
       }
       connectDrag = null;
@@ -2055,6 +2161,7 @@ function attachNodeInteractions(svg) {
     selectNodeById(id);
     pushHistory();
     renderFromModel();
+    markModelDirty("node position changed");
   });
 }
 
@@ -2257,6 +2364,15 @@ function wireToolbar() {
   if (els.btnConnect) {
     els.btnConnect.addEventListener("click", () => {
       setConnectMode(!state.connectMode);
+    });
+  }
+
+  if (els.btnExportMermaid) {
+    els.btnExportMermaid.addEventListener("click", async () => {
+      const mermaidText = getFullSourceForOutput();
+      const defaultFilePath = state.filePath ? state.filePath.replace(/\.[^.]+$/, ".mmd") : "diagram.mmd";
+      const res = await window.api.exportMermaid({ mermaidText, defaultFilePath });
+      if (!res.ok && !res.canceled) showError(res.error || "Mermaid export failed");
     });
   }
 
@@ -2665,9 +2781,10 @@ function wireModelControls() {
     if (!role) return;
     const ids = new Set(state.model.nodes.map((n) => n.id));
     const id = nextId(role.idPrefix || roleId.toUpperCase(), ids);
-    state.model.nodes.push({ id, label: role.label, role: roleId, boundaryId: null });
+    state.model.nodes.push({ id, label: role.label, role: roleId, boundaryId: null, groupId: null, groupName: null });
     pushHistory();
     renderFromModel();
+    markModelDirty("node added");
   });
 
   els.btnAddBoundary.addEventListener("click", () => {
@@ -2679,6 +2796,7 @@ function wireModelControls() {
     state.model.boundaries.push({ id, label: role.label, role: roleId });
     pushHistory();
     renderFromModel();
+    markModelDirty("zone added");
   });
 
   els.btnAddEdge.addEventListener("click", () => {
@@ -2693,6 +2811,7 @@ function wireModelControls() {
     els.txtEdgeLabel.value = "";
     pushHistory();
     renderFromModel();
+    markModelDirty("edge added");
   });
 }
 

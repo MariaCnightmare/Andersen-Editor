@@ -9,6 +9,7 @@ const ACTION_TO_DOM_ID = {
   "file:save": "btnSave",
   "file:saveAs": "btnSaveAs",
   "file:exportSvg": "btnExportSvg",
+  "file:exportMermaid": "btnExportMermaid",
   "file:exportPng": "btnExportPng",
   "file:exportPdf": "btnExportPdf",
   "file:exportModelJson": "btnExportModelJson",

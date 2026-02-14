@@ -410,6 +410,23 @@ ipcMain.handle("export:svg", async (_evt, args) => {
   return { ok: true, filePath: result.filePath };
 });
 
+ipcMain.handle("export:mermaid", async (_evt, args) => {
+  const win = ensureWindow();
+  const { mermaidText, defaultFilePath } = args || {};
+  if (!mermaidText) return { ok: false, error: "mermaidText is empty." };
+  const result = await dialog.showSaveDialog(win, {
+    title: "Mermaidとしてエクスポート",
+    defaultPath: defaultFilePath || "diagram.mmd",
+    filters: [
+      { name: "Mermaid", extensions: ["mmd", "md", "txt"] },
+      { name: "All Files", extensions: ["*"] }
+    ]
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  fs.writeFileSync(result.filePath, mermaidText, "utf-8");
+  return { ok: true, filePath: result.filePath };
+});
+
 ipcMain.handle("export:png", async (_evt, args) => {
   const win = ensureWindow();
   const { pngBase64, defaultFilePath } = args || {};

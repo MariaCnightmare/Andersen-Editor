@@ -59,6 +59,10 @@ function installAppMenu(win) {
           click: () => sendAction(win, "file:exportSvg")
         },
         {
+          label: "Mermaidを書き出し…",
+          click: () => sendAction(win, "file:exportMermaid")
+        },
+        {
           label: "PNGを書き出し…",
           click: () => sendAction(win, "file:exportPng")
         },
