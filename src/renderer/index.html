@@ -25,7 +25,8 @@
 
   <script src="../../node_modules/mermaid/dist/mermaid.min.js"></script>
 
-  <link rel="stylesheet" href="./style.css?v=2" />
+  <link rel="stylesheet" href="./tokens.css?v=1" />
+  <link rel="stylesheet" href="./style.css?v=3" />
 </head>
 
 <body>
@@ -65,12 +66,16 @@
           <select id="exportFormat" class="select">
             <option value="mermaid">Mermaid source (.mmd)</option>
             <option value="svg">SVG (.svg)</option>
+            <option value="png">PNG (.png)</option>
+            <option value="pdf">PDF (.pdf)</option>
+            <option value="modelJson">MODEL(JSON) (.json)</option>
           </select>
         </div>
         <div class="propRow">
           <label class="propLabel" for="exportPathInput">保存先（パス）</label>
           <div class="row">
-            <input id="exportPathInput" class="input wide mono" placeholder="/home/user/exports/diagram.mmd" />
+            <input id="exportPathInput" class="input wide mono" list="exportRecentList" placeholder="/home/user/exports/diagram.mmd" />
+            <datalist id="exportRecentList"></datalist>
             <button id="btnExportBrowse" class="btn" type="button">参照...</button>
           </div>
         </div>
@@ -87,111 +92,149 @@
     </div>
   </div>
   <header class="toolbar">
-    <div class="brand">
-      Andersen Editor
-      <span class="sub">Hybrid Infra Pack / Mermaid Round-trip</span>
-    </div>
-
-    <div class="group nativeMenuOnly">
-      <details class="menu">
-        <summary class="btn">File</summary>
-        <div class="menuPanel">
-          <button id="btnNew" class="btn">新規</button>
-          <button id="btnOpen" class="btn">開く</button>
-          <button id="btnSave" class="btn">保存</button>
-          <button id="btnSaveAs" class="btn">名前を付けて保存</button>
-        </div>
-      </details>
-      <details class="menu">
-        <summary class="btn">Clipboard</summary>
-        <div class="menuPanel">
-          <button id="btnCopyMermaid" class="btn">Copy Mermaid</button>
-          <button id="btnPasteMermaid" class="btn">Paste Mermaid</button>
-          <button id="btnCopySvg" class="btn">Copy SVG</button>
-          <button id="btnCopyPng" class="btn">Copy PNG</button>
-        </div>
-      </details>
-      <details class="menu">
-        <summary class="btn">Export</summary>
-        <div class="menuPanel">
-          <button id="btnExportMermaid" class="btn">Mermaid</button>
-          <button id="btnExportSvg" class="btn">SVG</button>
-          <button id="btnExportPng" class="btn">PNG</button>
-          <button id="btnExportPdf" class="btn">PDF</button>
-          <button id="btnExportModelJson" class="btn">MODEL(JSON)</button>
-        </div>
-      </details>
-    </div>
-
-    <div class="group">
-      <button id="btnUndo" class="btn">Undo</button>
-      <button id="btnRedo" class="btn">Redo</button>
-      <button id="btnFormat" class="btn">Format</button>
-      <button id="btnApplyText" class="btn">Apply <span class="applyBadge">●</span></button>
-      <button id="btnRelayout" class="btn">Re-layout</button>
-      <button id="btnConnect" class="btn">Connect</button>
-      <button id="btnToggleInspector" class="btn">Inspector</button>
-    </div>
-
-    <div class="group">
-      <label class="lbl">Theme</label>
-      <select id="selTheme" class="select"></select>
-
-      <label class="lbl">Direction</label>
-      <select id="selDir" class="select">
-        <option value="LR">LR</option>
-        <option value="TB">TB</option>
-      </select>
-
-      <label class="lbl">Mode</label>
-      <select id="selMode" class="select">
-        <option value="model">モデル編集</option>
-        <option value="text" selected>テキスト編集</option>
-      </select>
-
-      <label class="toggle">
-        <input type="checkbox" id="toggleDevMode" />
-        Dev mode
-      </label>
-
-      <label class="lbl">UI Scale</label>
-      <select id="selUiScale" class="select">
-        <option value="auto">Auto</option>
-        <option value="0.8">80%</option>
-        <option value="0.9">90%</option>
-        <option value="1">100%</option>
-        <option value="1.1">110%</option>
-        <option value="1.2">120%</option>
-      </select>
-
-      <label class="lbl">Ozone</label>
-      <select id="selOzone" class="select">
-        <option value="auto">Auto</option>
-        <option value="wayland">Wayland</option>
-        <option value="x11">X11</option>
-      </select>
-    </div>
-
-    <div class="status">
-      <div class="statusMain">
-        <span id="statusText" class="mono">ready</span>
-        <span id="statusDpr" class="mono">dpr:1</span>
-        <span id="statusZoom" class="mono">zoom:1</span>
-        <span id="statusBackend" class="mono">backend:unknown</span>
+    <div class="toolbarLeft">
+      <div class="brand" title="Andersen Editor - Hybrid Infra Pack / Mermaid Round-trip">
+        <div class="brandTitle">Andersen Editor</div>
+        <div class="brandSub">Hybrid Infra Pack / Mermaid Round-trip</div>
       </div>
-      <div class="statusMeta">
-        <span id="statusSession" class="mono">session:unknown</span>
-        <span id="statusDisplays" class="mono">display:</span>
-        <span id="statusScale" class="mono">displayScale:1</span>
-        <span id="statusUiScale" class="mono">uiScale:auto</span>
-        <span id="statusOzone" class="mono">ozone:auto</span>
-        <span id="statusGpu" class="mono"></span>
-        <span id="statusSizes" class="mono">screen:0x0 win:0x0</span>
-        <span id="statusWarn" class="mono"></span>
+    </div>
+
+    <div class="toolbarCenter">
+      <div class="group">
+        <details class="menu">
+          <summary class="btn withIcon">
+            <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 2h5l3 3v9H4z"></path>
+              <path d="M9 2v3h3"></path>
+            </svg>
+            <span>File</span>
+          </summary>
+          <div class="menuPanel">
+            <button id="btnNew" class="btn">新規</button>
+            <button id="btnOpen" class="btn">開く</button>
+            <button id="btnSave" class="btn">保存</button>
+            <button id="btnSaveAs" class="btn">名前を付けて保存</button>
+          </div>
+        </details>
+        <details class="menu">
+          <summary class="btn withIcon">
+            <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="4" y="3" width="8" height="11" rx="1.5"></rect>
+              <path d="M6 3.5h4"></path>
+              <path d="M6.5 2h3a1 1 0 0 1 1 1v1h-5V3a1 1 0 0 1 1-1z"></path>
+            </svg>
+            <span>Clipboard</span>
+          </summary>
+          <div class="menuPanel">
+            <button id="btnCopyMermaid" class="btn">Copy Mermaid</button>
+            <button id="btnPasteMermaid" class="btn">Paste Mermaid</button>
+            <button id="btnCopySvg" class="btn">Copy SVG</button>
+            <button id="btnCopyPng" class="btn">Copy PNG</button>
+          </div>
+        </details>
+        <details class="menu">
+          <summary class="btn btnPrimary withIcon">
+            <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 2v7"></path>
+              <path d="M5.5 6.5 8 9l2.5-2.5"></path>
+              <path d="M3 10.5v2.5h10v-2.5"></path>
+            </svg>
+            <span>Export</span>
+          </summary>
+          <div class="menuPanel">
+            <button id="btnExportMermaid" class="btn">Mermaid</button>
+            <button id="btnExportSvg" class="btn">SVG</button>
+            <button id="btnExportPng" class="btn">PNG</button>
+            <button id="btnExportPdf" class="btn">PDF</button>
+            <button id="btnExportModelJson" class="btn">MODEL(JSON)</button>
+          </div>
+        </details>
       </div>
-      <div id="taskProgress" class="taskProgress hidden" aria-live="polite">
-        <div id="taskProgressBar" class="taskProgressBar indeterminate"></div>
-        <span id="taskProgressLabel" class="mono">processing...</span>
+      <div class="group">
+        <button id="btnUndo" class="btn btnSecondary withIcon">
+          <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6.5 4 3.5 7l3 3"></path>
+            <path d="M4 7h5a3.5 3.5 0 1 1 0 7"></path>
+          </svg>
+          <span>Undo</span>
+        </button>
+        <button id="btnRedo" class="btn btnSecondary withIcon">
+          <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="m9.5 4 3 3-3 3"></path>
+            <path d="M12 7H7a3.5 3.5 0 1 0 0 7"></path>
+          </svg>
+          <span>Redo</span>
+        </button>
+        <button id="btnFormat" class="btn btnSecondary">Format</button>
+        <button id="btnApplyText" class="btn">Apply <span class="applyBadge">●</span></button>
+        <button id="btnRelayout" class="btn btnSecondary">Re-layout</button>
+        <button id="btnConnect" class="btn btnSecondary">Connect</button>
+        <button id="btnToggleInspector" class="btn btnToggle">Inspector</button>
+      </div>
+
+      <div class="group">
+        <label class="lbl">Theme</label>
+        <select id="selTheme" class="select"></select>
+
+        <label class="lbl">Direction</label>
+        <select id="selDir" class="select">
+          <option value="LR">LR</option>
+          <option value="TB">TB</option>
+        </select>
+
+        <label class="lbl">Mode</label>
+        <select id="selMode" class="select">
+          <option value="model">モデル編集</option>
+          <option value="text" selected>テキスト編集</option>
+        </select>
+
+        <label class="toggle">
+          <input type="checkbox" id="toggleDevMode" />
+          Dev mode
+        </label>
+
+        <label class="lbl">UI Scale</label>
+        <select id="selUiScale" class="select">
+          <option value="auto">Auto</option>
+          <option value="0.8">80%</option>
+          <option value="0.9">90%</option>
+          <option value="1">100%</option>
+          <option value="1.1">110%</option>
+          <option value="1.2">120%</option>
+        </select>
+
+        <label class="lbl">Ozone</label>
+        <select id="selOzone" class="select">
+          <option value="auto">Auto</option>
+          <option value="wayland">Wayland</option>
+          <option value="x11">X11</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="toolbarRight">
+      <div class="status">
+        <div class="statusMain">
+          <span id="statusText" class="mono">ready</span>
+          <button id="btnStatusDetails" class="btn btnMini statusDetailsBtn hidden" type="button">Details</button>
+        </div>
+        <div id="statusMetaWrap" class="statusMeta hidden">
+          <span id="statusDpr" class="mono">dpr:1</span>
+          <span id="statusZoom" class="mono">zoom:1</span>
+          <span id="statusBackend" class="mono">backend:unknown</span>
+          <span id="statusSession" class="mono">session:unknown</span>
+          <span id="statusDisplays" class="mono">display:</span>
+          <span id="statusScale" class="mono">displayScale:1</span>
+          <span id="statusUiScale" class="mono">uiScale:auto</span>
+          <span id="statusOzone" class="mono">ozone:auto</span>
+          <span id="statusGpu" class="mono"></span>
+          <span id="statusSizes" class="mono">screen:0x0 win:0x0</span>
+          <span id="statusWarn" class="mono"></span>
+        </div>
+        <div id="taskProgress" class="taskProgress hidden" aria-live="polite">
+          <div id="taskProgressBar" class="taskProgressBar indeterminate"></div>
+          <span id="taskProgressLabel" class="mono">processing...</span>
+        </div>
       </div>
     </div>
   </header>

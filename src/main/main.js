@@ -178,7 +178,7 @@ function createWindow() {
     backgroundColor: simpleUi ? "#ffffff" : "#0b0f16",
     frame: true,
     titleBarStyle: "default",
-    autoHideMenuBar: false,
+    autoHideMenuBar: process.platform !== "darwin",
     webPreferences: {
       contextIsolation: !simpleUi,
       nodeIntegration: simpleUi,
@@ -190,6 +190,10 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "..", "renderer", "simple.html"));
   } else {
     mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  }
+
+  if (process.platform !== "darwin") {
+    mainWindow.setMenuBarVisibility(false);
   }
 
   if (process.env.AE_DEVTOOLS === "1") {
@@ -313,7 +317,9 @@ ipcMain.handle("diag:getInfo", async () => {
     diagInfo.zoomFactor = await win.webContents.getZoomFactor();
   } catch {}
   try {
-    diagInfo.displayScale = screen.getPrimaryDisplay().scaleFactor;
+    const win = ensureWindow();
+    const display = screen.getDisplayMatching(win.getBounds());
+    diagInfo.displayScale = (display && display.scaleFactor) || screen.getPrimaryDisplay().scaleFactor;
   } catch {}
   const gpu = await collectGpuDiagnostics(false);
   return {
@@ -340,7 +346,8 @@ ipcMain.handle("diag:copyToClipboard", async () => {
       diagInfo.zoomFactor = await win.webContents.getZoomFactor();
     } catch {}
     try {
-      diagInfo.displayScale = screen.getPrimaryDisplay().scaleFactor;
+      const display = screen.getDisplayMatching(win.getBounds());
+      diagInfo.displayScale = (display && display.scaleFactor) || screen.getPrimaryDisplay().scaleFactor;
     } catch {}
     const gpu = await collectGpuDiagnostics(true);
     const text = formatDiagnosticsText(diagInfo, gpu);
@@ -498,6 +505,9 @@ function timestampToken() {
 
 function extensionForFormat(format) {
   if (format === "svg") return ".svg";
+  if (format === "png") return ".png";
+  if (format === "pdf") return ".pdf";
+  if (format === "modelJson") return ".json";
   return ".mmd";
 }
 
@@ -518,20 +528,45 @@ function normalizePathForFormat(filePath, format) {
 ipcMain.handle("dialog:chooseExportPath", async (_evt, args) => {
   try {
     const win = ensureWindow();
-    const format = String(args?.format || "mermaid").toLowerCase() === "svg" ? "svg" : "mermaid";
+    const rawFormat = String(args?.format || "mermaid").toLowerCase();
+    const format =
+      rawFormat === "svg"
+        ? "svg"
+        : rawFormat === "png"
+          ? "png"
+          : rawFormat === "pdf"
+            ? "pdf"
+            : rawFormat === "modeljson"
+              ? "modelJson"
+              : "mermaid";
     const requestedPath = String(args?.filePath || "").trim();
     const ext = extensionForFormat(format);
     const defaultPath = normalizePathForFormat(requestedPath || `diagram${ext}`, format);
     const filters =
       format === "svg"
         ? [{ name: "SVG", extensions: ["svg"] }]
-        : [
-            { name: "Mermaid", extensions: ["mmd", "mermaid"] },
-            { name: "All Files", extensions: ["*"] }
-          ];
+        : format === "png"
+          ? [{ name: "PNG", extensions: ["png"] }]
+          : format === "pdf"
+            ? [{ name: "PDF", extensions: ["pdf"] }]
+            : format === "modelJson"
+              ? [{ name: "JSON", extensions: ["json"] }]
+              : [
+                  { name: "Mermaid", extensions: ["mmd", "mermaid"] },
+                  { name: "All Files", extensions: ["*"] }
+                ];
 
     const result = await dialog.showSaveDialog(win, {
-      title: format === "svg" ? "SVGとしてエクスポート" : "Mermaidとしてエクスポート",
+      title:
+        format === "svg"
+          ? "SVGとしてエクスポート"
+          : format === "png"
+            ? "PNGとしてエクスポート"
+            : format === "pdf"
+              ? "PDFとしてエクスポート"
+              : format === "modelJson"
+                ? "MODEL(JSON)としてエクスポート"
+                : "Mermaidとしてエクスポート",
       defaultPath,
       filters
     });
@@ -553,6 +588,55 @@ ipcMain.handle("export:writeFile", async (_evt, args) => {
     return { ok: true, filePath };
   } catch (err) {
     return { ok: false, error: err?.message || "export write failed" };
+  }
+});
+
+ipcMain.handle("export:writePngFile", async (_evt, args) => {
+  try {
+    const filePath = normalizePathForFormat(args?.filePath, "png");
+    const pngBase64 = String(args?.pngBase64 || "");
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+    if (!pngBase64) return { ok: false, error: "pngBase64 is empty." };
+    const base64 = pngBase64.replace(/^data:image\/png;base64,/, "");
+    fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err?.message || "export png write failed" };
+  }
+});
+
+ipcMain.handle("export:writePdfFile", async (_evt, args) => {
+  try {
+    const win = ensureWindow();
+    const filePath = normalizePathForFormat(args?.filePath, "pdf");
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+
+    await win.webContents.executeJavaScript(`document.body.classList.add("printing")`);
+    await new Promise((r) => setTimeout(r, 60));
+    const pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      marginsType: 0,
+      pageSize: "A4"
+    });
+    await win.webContents.executeJavaScript(`document.body.classList.remove("printing")`);
+
+    fs.writeFileSync(filePath, pdfBuffer);
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err?.message || "export pdf write failed" };
+  }
+});
+
+ipcMain.handle("export:writeModelJsonFile", async (_evt, args) => {
+  try {
+    const filePath = normalizePathForFormat(args?.filePath, "modelJson");
+    const modelJson = String(args?.modelJson || "");
+    if (!filePath) return { ok: false, error: "filePath is empty." };
+    if (!modelJson) return { ok: false, error: "modelJson is empty." };
+    fs.writeFileSync(filePath, modelJson, "utf-8");
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err?.message || "export model json write failed" };
   }
 });
 

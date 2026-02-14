@@ -61,13 +61,18 @@ const state = {
   exportDialogWired: false,
   taskDepth: 0,
   nativeMenuWired: false,
-  menuHandlers: {}
+  menuHandlers: {},
+  exportRecentPaths: [],
+  statusDetailsOpen: false,
+  lastAutoScaleKey: ""
 };
 
 const els = {
   preview: $("preview"),
   statusWrap: document.querySelector(".status"),
   statusText: $("statusText"),
+  btnStatusDetails: $("btnStatusDetails"),
+  statusMetaWrap: $("statusMetaWrap"),
   statusDpr: $("statusDpr"),
   statusZoom: $("statusZoom"),
   statusBackend: $("statusBackend"),
@@ -159,6 +164,7 @@ const els = {
   exportDialog: $("exportDialog"),
   exportFormat: $("exportFormat"),
   exportPathInput: $("exportPathInput"),
+  exportRecentList: $("exportRecentList"),
   btnExportBrowse: $("btnExportBrowse"),
   exportOpenFolder: $("exportOpenFolder"),
   exportError: $("exportError"),
@@ -178,6 +184,18 @@ function setStatus(level, msg) {
   els.statusWrap.classList.toggle("dirty", level === "dirty");
   els.statusWrap.classList.toggle("warn", level === "warn");
   if (level === "ok") setStatusReason("");
+}
+
+function updateStatusDetailsVisibility() {
+  const canShow = !!state.devMode;
+  if (els.btnStatusDetails) {
+    els.btnStatusDetails.classList.toggle("hidden", !canShow);
+    els.btnStatusDetails.textContent = canShow && state.statusDetailsOpen ? "Hide" : "Details";
+  }
+  if (els.statusMetaWrap) {
+    const open = canShow && !!state.statusDetailsOpen;
+    els.statusMetaWrap.classList.toggle("hidden", !open);
+  }
 }
 
 function updateDprStatus() {
@@ -237,18 +255,20 @@ async function updateDiagnostics() {
       if (!state.devMode) {
         els.statusWarn.textContent = "";
       } else if (diag.warning) {
-        els.statusWarn.textContent = `warn:${diag.warning}`;
+        els.statusWarn.textContent = `info:${diag.warning}`;
       } else if (diag?.ozoneDecision?.reason) {
         const reason = String(diag.ozoneDecision.reason || "unknown");
-        const prefix = reason === "wsl_decorations_default" ? "auto" : reason;
-        els.statusWarn.textContent = `ozone:${prefix}->${diag.ozoneDecision.resolved}`;
+        const from = diag?.ozoneDecision?.envHint ? "env" : reason === "wsl_decorations_default" ? "auto" : reason;
+        els.statusWarn.textContent = `ozone:${from}->${diag.ozoneDecision.resolved} (${reason})`;
       } else {
         els.statusWarn.textContent = "";
       }
     }
+    updateStatusDetailsVisibility();
     return diag;
   } catch (err) {
     if (els.statusWarn) els.statusWarn.textContent = state.devMode ? "warn:diag unavailable" : "";
+    updateStatusDetailsVisibility();
   }
   return null;
 }
@@ -266,6 +286,29 @@ async function applyUiZoom(choice, diag = null) {
     document.documentElement.style.fontSize = `${Math.round(zoomFactor * 100)}%`;
   }
   return { normalized, zoomFactor };
+}
+
+async function syncAutoUiScaleIfNeeded({ force = false } = {}) {
+  if (!els.selUiScale) return;
+  const pref = normalizeUiScaleChoice(els.selUiScale.value) || "auto";
+  if (pref !== "auto") {
+    state.lastAutoScaleKey = "";
+    return;
+  }
+  const diag = await updateDiagnostics();
+  if (!diag) return;
+  const dpr = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+  const scale = Math.round((Number(diag.displayScale) || 1) * 100) / 100;
+  const nextKey = `${dpr}|${scale}`;
+  if (!force && state.lastAutoScaleKey === nextKey) return;
+  state.lastAutoScaleKey = nextKey;
+  try {
+    await applyUiZoom("auto", diag);
+  } catch (err) {
+    if (state.devMode && els.statusWarn) {
+      els.statusWarn.textContent = `warn:${err?.message || "ui scale auto apply failed"}`;
+    }
+  }
 }
 
 function clearError({ preserveStatus = false } = {}) {
@@ -890,11 +933,21 @@ function exportTimestampToken() {
 }
 
 function normalizeExportFormat(value) {
-  return String(value || "").toLowerCase() === "svg" ? "svg" : "mermaid";
+  const v = String(value || "").toLowerCase();
+  if (v === "svg") return "svg";
+  if (v === "png") return "png";
+  if (v === "pdf") return "pdf";
+  if (v === "modeljson" || v === "model_json" || v === "json") return "modelJson";
+  return "mermaid";
 }
 
 function extensionForExportFormat(format) {
-  return normalizeExportFormat(format) === "svg" ? ".svg" : ".mmd";
+  const f = normalizeExportFormat(format);
+  if (f === "svg") return ".svg";
+  if (f === "png") return ".png";
+  if (f === "pdf") return ".pdf";
+  if (f === "modelJson") return ".json";
+  return ".mmd";
 }
 
 function buildDefaultExportPath(format) {
@@ -915,6 +968,40 @@ function normalizeExportPathInput(inputPath, format) {
   }
   if (trimmed.toLowerCase().endsWith(ext)) return trimmed;
   return `${trimmed.replace(/\.[^.\\/]+$/, "")}${ext}`;
+}
+
+function loadExportRecentPaths() {
+  try {
+    const raw = localStorage.getItem("ae:exportRecentPaths");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x) => typeof x === "string" && x.trim()).slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+function saveExportRecentPath(pathValue) {
+  const p = String(pathValue || "").trim();
+  if (!p) return;
+  const next = [p, ...state.exportRecentPaths.filter((x) => x !== p)].slice(0, 5);
+  state.exportRecentPaths = next;
+  try {
+    localStorage.setItem("ae:exportRecentPaths", JSON.stringify(next));
+  } catch {}
+  renderExportRecentPaths();
+}
+
+function renderExportRecentPaths() {
+  if (els.exportRecentList) {
+    els.exportRecentList.innerHTML = "";
+    for (const item of state.exportRecentPaths) {
+      const opt = document.createElement("option");
+      opt.value = item;
+      els.exportRecentList.appendChild(opt);
+    }
+  }
 }
 
 function setExportError(message) {
@@ -965,25 +1052,48 @@ async function runExportFromDialog() {
   if (validation.changed && els.exportPathInput) {
     els.exportPathInput.value = filePath;
   }
-  let content = "";
+  let res = null;
   if (format === "svg") {
-    content = getSvgText();
+    const content = getSvgText();
     if (!content) {
       setExportError("SVGプレビューが取得できません。先にApplyしてレンダしてください。");
       return;
     }
-  } else {
-    content = getFullSourceForOutput();
+    res = await window.api?.exportWriteFile?.({ format, filePath, content });
+  } else if (format === "mermaid") {
+    const content = getFullSourceForOutput();
+    res = await window.api?.exportWriteFile?.({ format, filePath, content });
+  } else if (format === "png") {
+    const svgText = getSvgText();
+    if (!svgText) {
+      setExportError("SVGプレビューが取得できません。先にApplyしてレンダしてください。");
+      return;
+    }
+    try {
+      setTaskProgress(0.35, "rendering png...");
+      const pngBase64 = await svgToPng(svgText);
+      setTaskProgress(0.75, "saving png...");
+      res = await window.api?.exportWritePngFile?.({ pngBase64, filePath });
+    } catch (err) {
+      setExportError(err?.message || "PNG変換に失敗しました。");
+      return;
+    }
+  } else if (format === "pdf") {
+    setTaskProgress(0.55, "printing pdf...");
+    res = await window.api?.exportWritePdfFile?.({ filePath });
+  } else if (format === "modelJson") {
+    const modelJson = getModelJsonText();
+    res = await window.api?.exportWriteModelJsonFile?.({ modelJson, filePath });
   }
-  const res = await window.api?.exportWriteFile?.({ format, filePath, content });
   if (!res?.ok) {
-    setExportError(res?.error || "Exportに失敗しました。");
+    if (!res?.canceled) setExportError(res?.error || "Exportに失敗しました。");
     return;
   }
+  saveExportRecentPath(res.filePath || filePath);
   if (els.exportOpenFolder?.checked) {
     await window.api?.showItemInFolder?.({ filePath: res.filePath });
   }
-  const reason = format === "svg" ? "export-svg" : "export-mermaid";
+  const reason = `export-${format}`;
   addDocSnapshot(reason);
   showToast(`保存しました: ${res.filePath}`);
   closeExportDialog();
@@ -996,6 +1106,7 @@ function openExportDialog(initialFormat) {
   els.exportFormat.value = format;
   els.exportPathInput.value = buildDefaultExportPath(format);
   if (els.exportOpenFolder) els.exportOpenFolder.checked = false;
+  renderExportRecentPaths();
   setExportError("");
   els.exportDialog.classList.remove("hidden");
   els.exportPathInput.focus();
@@ -1006,6 +1117,10 @@ function wireExportDialog() {
   if (state.exportDialogWired) return;
   if (!els.exportDialog || !els.exportFormat || !els.exportPathInput) return;
   state.exportDialogWired = true;
+  if (!state.exportRecentPaths.length) {
+    state.exportRecentPaths = loadExportRecentPaths();
+    renderExportRecentPaths();
+  }
 
   els.exportFormat.addEventListener("change", () => {
     const format = normalizeExportFormat(els.exportFormat.value);
@@ -1028,7 +1143,9 @@ function wireExportDialog() {
 
   els.btnExportCancel?.addEventListener("click", () => closeExportDialog());
   els.btnExportRun?.addEventListener("click", async () => {
-    await runExportFromDialog();
+    await withTask("exporting...", async () => {
+      await runExportFromDialog();
+    });
   });
   els.exportDialog.addEventListener("click", (evt) => {
     if (evt.target === els.exportDialog) closeExportDialog();
@@ -1305,6 +1422,7 @@ function updateApplyButton() {
 function updateInternalToggleVisibility() {
   const hasInternal = !!(state.model?.rawBlocks && state.model.rawBlocks.length);
   const showDev = state.devMode;
+  document.body.classList.toggle("dev-mode", showDev);
   if (els.internalPanel) {
     els.internalPanel.classList.toggle("hidden", !showDev || !hasInternal);
     if (!showDev) {
@@ -1324,6 +1442,7 @@ function updateInternalToggleVisibility() {
   if (!hasInternal && !state.showInternalBlocks && els.toggleInternalBlocks) {
     els.toggleInternalBlocks.checked = false;
   }
+  updateStatusDetailsVisibility();
 }
 
 function applyInspectorVisibility() {
@@ -1332,6 +1451,11 @@ function applyInspectorVisibility() {
     els.btnToggleInspector.classList.toggle("active", state.inspectorVisible);
     els.btnToggleInspector.textContent = state.inspectorVisible ? "Inspector ON" : "Inspector OFF";
   }
+}
+
+function setInspectorEmptyState(isEmpty) {
+  if (!els.inspector) return;
+  els.inspector.classList.toggle("is-empty", !!isEmpty);
 }
 
 function nextId(prefix, existingIds) {
@@ -2037,6 +2161,7 @@ function applyConnectHandles(svg) {
 function renderPropPanel() {
   const inspectorBody = els.inspectorBody || els.inspector;
   if (state.edgeAmbiguous) {
+    setInspectorEmptyState(false);
     if (inspectorBody) inspectorBody.innerHTML = "";
     const row = document.createElement("div");
     row.className = "propRow";
@@ -2056,9 +2181,11 @@ function renderPropPanel() {
   if (!target) {
     if (inspectorBody) inspectorBody.textContent = "Select a node/edge to edit";
     setInspectorHeader("Inspector", "Select", "muted");
+    setInspectorEmptyState(true);
     updateInspectorState();
     return;
   }
+  setInspectorEmptyState(false);
 
   const isHover = target.mode === "hover";
   if (inspectorBody) inspectorBody.innerHTML = "";
@@ -3128,70 +3255,26 @@ function wireToolbar() {
     });
   }
 
-  if (els.btnExportMermaid) {
-    els.btnExportMermaid.addEventListener("click", async () => {
-      await withTask("exporting mermaid...", async () => {
-        const mermaidText = getFullSourceForOutput();
-        const defaultFilePath = state.filePath ? state.filePath.replace(/\.[^.]+$/, ".mmd") : "diagram.mmd";
-        const res = await window.api.exportMermaid({ mermaidText, defaultFilePath });
-        if (res.ok) addDocSnapshot("export-mermaid");
-        if (!res.ok && !res.canceled) showError(res.error || "Mermaid export failed");
-      });
+  if (els.btnStatusDetails) {
+    els.btnStatusDetails.addEventListener("click", () => {
+      state.statusDetailsOpen = !state.statusDetailsOpen;
+      localStorage.setItem("ae:statusDetailsOpen", state.statusDetailsOpen ? "1" : "0");
+      updateStatusDetailsVisibility();
     });
   }
 
-  els.btnExportSvg.addEventListener("click", async () => {
-    await withTask("exporting svg...", async () => {
-      const svgText = getSvgText();
-      if (!svgText) return showError("SVGがありません");
-      const res = await window.api.exportSvg({ svgText, defaultFilePath: state.filePath });
-      if (res.ok) addDocSnapshot("export-svg");
-      if (!res.ok && !res.canceled) showError(res.error || "SVG export failed");
-    });
-  });
+  if (els.btnExportMermaid) {
+    els.btnExportMermaid.addEventListener("click", () => openExportDialog("mermaid"));
+  }
 
-  els.btnExportPng.addEventListener("click", async () => {
-    await withTask("exporting png...", async () => {
-      const svgText = getSvgText();
-      if (!svgText) return showError("SVGがありません");
-      try {
-        setTaskProgress(0.4, "rendering png...");
-        const pngBase64 = await svgToPng(svgText);
-        setTaskProgress(0.8, "saving png...");
-        const res = await window.api.exportPng({ pngBase64, defaultFilePath: state.filePath });
-        if (res.ok) addDocSnapshot("export-png");
-        if (!res.ok && !res.canceled) showError(res.error || "PNG export failed");
-      } catch (err) {
-        showError(err);
-      }
-    });
-  });
+  els.btnExportSvg.addEventListener("click", () => openExportDialog("svg"));
 
-  els.btnExportPdf.addEventListener("click", async () => {
-    await withTask("exporting pdf...", async () => {
-      setTaskProgress(0.5, "printing pdf...");
-      const res = await window.api.exportPdf({ defaultFilePath: state.filePath });
-      if (res.ok) addDocSnapshot("export-pdf");
-      if (!res.ok && !res.canceled) showError(res.error || "PDF export failed");
-    });
-  });
+  els.btnExportPng.addEventListener("click", () => openExportDialog("png"));
+
+  els.btnExportPdf.addEventListener("click", () => openExportDialog("pdf"));
 
   if (els.btnExportModelJson) {
-    els.btnExportModelJson.addEventListener("click", async () => {
-      await withTask("exporting model...", async () => {
-        try {
-          const modelJson = getModelJsonText();
-          const defaultFilePath = state.filePath
-            ? state.filePath.replace(/\.[^.]+$/, ".model.json")
-            : "diagram.model.json";
-          const res = await window.api.exportModelJson({ modelJson, defaultFilePath });
-          if (res.ok) addDocSnapshot("export-model-json");
-          if (!res.ok && !res.canceled) showError(res.error || "MODEL export failed");
-        } catch (err) {
-          showError(err);
-        }
-      });
-    });
+    els.btnExportModelJson.addEventListener("click", () => openExportDialog("modelJson"));
   }
 
   els.btnZoomIn.addEventListener("click", (evt) => {
@@ -3413,6 +3496,10 @@ function wireToolbar() {
     els.toggleDevMode.addEventListener("change", () => {
       state.devMode = els.toggleDevMode.checked;
       localStorage.setItem("ae:devMode", state.devMode ? "1" : "0");
+      if (!state.devMode && state.statusDetailsOpen) {
+        state.statusDetailsOpen = false;
+        localStorage.setItem("ae:statusDetailsOpen", "0");
+      }
       if (!state.devMode && state.showInternalBlocks) {
         state.showInternalBlocks = false;
         if (els.toggleInternalBlocks) els.toggleInternalBlocks.checked = false;
@@ -3803,41 +3890,61 @@ function wireSplitters() {
   const problemSplitter = document.querySelector('.hsplitter[data-split="problems"]');
   if (!leftSplitter || !rightSplitter || !els.layout) return;
 
-  const startDrag = (side, evt) => {
+  const startDrag = (side, splitterEl, evt) => {
+    if (evt.button !== 0) return;
     evt.preventDefault();
+    evt.stopPropagation();
     document.body.classList.add("dragging");
     const rect = els.layout.getBoundingClientRect();
     const splitterW = 12;
-    const gap = 0;
-    const minLeft = 240;
-    const minRight = 360;
-    const minCenter = 480;
+    const minLeft = 220;
+    const minRight = 300;
+    const minCenter = 360;
+    const available = Math.max(320, rect.width - splitterW * 2);
+    const maxLeft = Math.max(minLeft + 24, available - minRight - minCenter);
+    const maxRight = Math.max(minRight + 24, available - minLeft - minCenter);
+    let pointerId = evt.pointerId;
+
+    try {
+      if (splitterEl && splitterEl.setPointerCapture != null && pointerId != null) {
+        splitterEl.setPointerCapture(pointerId);
+      }
+    } catch {}
+
     const onMove = (e) => {
+      if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
       if (side === "left") {
-        const maxLeft = rect.width - minRight - minCenter - splitterW * 2 - gap * 4;
         const left = clamp(e.clientX - rect.left, minLeft, maxLeft);
         applyPaneSizes(left, null);
       } else {
-        const maxRight = rect.width - minLeft - minCenter - splitterW * 2 - gap * 4;
         const right = clamp(rect.right - e.clientX, minRight, maxRight);
         applyPaneSizes(null, right);
       }
     };
     const onUp = (e) => {
+      if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
       document.body.classList.remove("dragging");
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      try {
+        if (splitterEl && splitterEl.releasePointerCapture != null && pointerId != null) {
+          splitterEl.releasePointerCapture(pointerId);
+        }
+      } catch {}
+      pointerId = null;
       const styles = getComputedStyle(document.documentElement);
       const left = parseFloat(styles.getPropertyValue("--left-w")) || 260;
       const right = parseFloat(styles.getPropertyValue("--right-w")) || 420;
       savePaneSizes(left, right);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
-  leftSplitter.addEventListener("mousedown", (evt) => startDrag("left", evt));
-  rightSplitter.addEventListener("mousedown", (evt) => startDrag("right", evt));
+  leftSplitter.addEventListener("pointerdown", (evt) => startDrag("left", leftSplitter, evt));
+  rightSplitter.addEventListener("pointerdown", (evt) => startDrag("right", rightSplitter, evt));
 
   if (problemSplitter) {
     problemSplitter.addEventListener("mousedown", (evt) => {
@@ -4117,6 +4224,8 @@ async function boot() {
   const dev = localStorage.getItem("ae:devMode");
   if (dev) state.devMode = dev === "1";
   if (els.toggleDevMode) els.toggleDevMode.checked = state.devMode;
+  const statusDetailsOpen = localStorage.getItem("ae:statusDetailsOpen");
+  state.statusDetailsOpen = statusDetailsOpen === "1";
   const inspectorVisible = localStorage.getItem("ae:inspectorVisible");
   state.inspectorVisible = inspectorVisible === "1";
   applyInspectorVisibility();
@@ -4140,13 +4249,26 @@ async function boot() {
   setFileInfo();
   applyZoom();
   updateDprStatus();
-  window.addEventListener("resize", updateDprStatus);
+  const onViewportScaleChanged = debounce(() => {
+    updateDprStatus();
+    void syncAutoUiScaleIfNeeded();
+  }, 120);
+  window.addEventListener("resize", onViewportScaleChanged);
+  window.addEventListener("focus", onViewportScaleChanged);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) onViewportScaleChanged();
+  });
   const diag = await updateDiagnostics();
   if (els.selUiScale) {
     const pref = normalizeUiScaleChoice((diag && diag.uiScalePref) || "auto") || "auto";
     els.selUiScale.value = pref;
     try {
       await applyUiZoom(pref, diag);
+      if (pref === "auto") {
+        const dpr = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+        const scale = Math.round((Number(diag?.displayScale) || 1) * 100) / 100;
+        state.lastAutoScaleKey = `${dpr}|${scale}`;
+      }
     } catch (err) {
       if (els.statusWarn) els.statusWarn.textContent = `warn:${err?.message || "ui scale apply failed"}`;
     }
