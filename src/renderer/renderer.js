@@ -209,11 +209,21 @@ async function updateDiagnostics() {
       }
     }
     if (els.statusWarn) {
-      els.statusWarn.textContent = diag.warning ? `warn:${diag.warning}` : "";
+      if (!state.devMode) {
+        els.statusWarn.textContent = "";
+      } else if (diag.warning) {
+        els.statusWarn.textContent = `warn:${diag.warning}`;
+      } else if (diag?.ozoneDecision?.reason) {
+        const reason = String(diag.ozoneDecision.reason || "unknown");
+        const prefix = reason === "wsl_decorations_default" ? "auto" : reason;
+        els.statusWarn.textContent = `ozone:${prefix}->${diag.ozoneDecision.resolved}`;
+      } else {
+        els.statusWarn.textContent = "";
+      }
     }
     return diag;
   } catch (err) {
-    if (els.statusWarn) els.statusWarn.textContent = "warn:diag unavailable";
+    if (els.statusWarn) els.statusWarn.textContent = state.devMode ? "warn:diag unavailable" : "";
   }
   return null;
 }
@@ -261,6 +271,24 @@ function setOutOfSync(flag, reason = "") {
     setStatus("ok", "ready");
     setStatusReason("");
   }
+}
+
+function devLog(...args) {
+  if (!state.devMode) return;
+  console.log("[dev]", ...args);
+}
+
+function normalizeHexColor(value) {
+  const v = String(value || "").trim();
+  if (!v) return null;
+  if (/^#[0-9a-f]{3}$/i.test(v) || /^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
+  return null;
+}
+
+function normalizeEdgeWidth(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.max(0.5, Math.min(12, Math.round(n * 10) / 10));
 }
 
 function showError(err) {
@@ -1478,8 +1506,7 @@ async function renderFromText({ live = false } = {}) {
   return true;
 }
 
-function getNodeIdFromElement(el) {
-  const g = el.closest("g.node");
+function getNodeIdFromGroup(g) {
   if (!g) return null;
   if (g.dataset.aeNodeId) return g.dataset.aeNodeId;
   const title = g.querySelector("title");
@@ -1487,7 +1514,33 @@ function getNodeIdFromElement(el) {
     g.dataset.aeNodeId = title.textContent.trim();
     return g.dataset.aeNodeId;
   }
+  // Mermaid version differences: title can be missing. Fallback to id-pattern matching.
+  const idLike = g.getAttribute("id") || "";
+  if (idLike) {
+    const m = idLike.match(/(?:flowchart|graph)-([A-Za-z0-9_\-]+)-\d+$/);
+    if (m && m[1]) {
+      g.dataset.aeNodeId = m[1];
+      return g.dataset.aeNodeId;
+    }
+  }
+  if (state.model?.nodes?.length) {
+    const text = `${idLike} ${Array.from(g.querySelectorAll("[id]"))
+      .map((n) => n.getAttribute("id"))
+      .join(" ")}`;
+    for (const n of state.model.nodes) {
+      if (text.includes(`-${n.id}-`) || text.endsWith(`-${n.id}`) || text.includes(`${n.id}-`)) {
+        g.dataset.aeNodeId = n.id;
+        return g.dataset.aeNodeId;
+      }
+    }
+  }
   return null;
+}
+
+function getNodeIdFromElement(el) {
+  const g = el.closest("g.node");
+  if (!g) return null;
+  return getNodeIdFromGroup(g);
 }
 
 function parseTranslate(transform) {
@@ -1502,10 +1555,14 @@ function setNodeTransform(g, x, y) {
 
 function applyNodePositions(svg) {
   if (!state.model) return;
+  let mapped = 0;
+  let pinnedApplied = 0;
+  const unresolvedPinned = [];
   const nodes = svg.querySelectorAll("g.node");
   for (const g of nodes) {
-    const id = getNodeIdFromElement(g);
+    const id = getNodeIdFromGroup(g);
     if (!id) continue;
+    mapped += 1;
     const modelNode = state.model.nodes.find((n) => n.id === id);
     const base = parseTranslate(g.getAttribute("transform"));
     g.dataset.baseX = String(base.x);
@@ -1526,8 +1583,16 @@ function applyNodePositions(svg) {
       const x = base.x + offset.x;
       const y = base.y + offset.y;
       setNodeTransform(g, x, y);
+      pinnedApplied += 1;
+    } else if (modelNode?.pinned) {
+      unresolvedPinned.push(modelNode.id);
     }
   }
+  devLog("postRender/applyNodePositions", {
+    mapped,
+    pinnedApplied,
+    unresolvedPinned
+  });
 }
 
 function applySelection(svg) {
@@ -1813,11 +1878,45 @@ function renderPropPanel() {
         node.className = p.id || null;
         renderFromModel();
         pushHistory();
+        markModelDirty("node class changed");
       });
       colorRow.appendChild(btn);
     }
     rowColor.appendChild(colorLabel);
     rowColor.appendChild(colorRow);
+
+    const rowCustomStyle = document.createElement("div");
+    rowCustomStyle.className = "propRow";
+    const customLabel = document.createElement("div");
+    customLabel.className = "propLabel";
+    customLabel.textContent = "Custom Style";
+    const customWrap = document.createElement("div");
+    customWrap.className = "row";
+    const fillInput = document.createElement("input");
+    fillInput.className = "input";
+    fillInput.placeholder = "fill #rrggbb";
+    fillInput.value = node?.style?.fill || "";
+    fillInput.disabled = isHover;
+    const strokeInput = document.createElement("input");
+    strokeInput.className = "input";
+    strokeInput.placeholder = "stroke #rrggbb";
+    strokeInput.value = node?.style?.stroke || "";
+    strokeInput.disabled = isHover;
+    const textColorInput = document.createElement("input");
+    textColorInput.className = "input";
+    textColorInput.placeholder = "text #rrggbb";
+    textColorInput.value = node?.style?.color || "";
+    textColorInput.disabled = isHover;
+    const resetStyleBtn = document.createElement("button");
+    resetStyleBtn.className = "btn";
+    resetStyleBtn.textContent = "Reset";
+    resetStyleBtn.disabled = isHover;
+    customWrap.appendChild(fillInput);
+    customWrap.appendChild(strokeInput);
+    customWrap.appendChild(textColorInput);
+    customWrap.appendChild(resetStyleBtn);
+    rowCustomStyle.appendChild(customLabel);
+    rowCustomStyle.appendChild(customWrap);
 
     const rowPinned = document.createElement("div");
     rowPinned.className = "propRow";
@@ -1844,6 +1943,7 @@ function renderPropPanel() {
       inspectorBody.appendChild(rowZone);
       inspectorBody.appendChild(rowZoneName);
       inspectorBody.appendChild(rowColor);
+      inspectorBody.appendChild(rowCustomStyle);
       inspectorBody.appendChild(rowPinned);
     }
 
@@ -1861,6 +1961,44 @@ function renderPropPanel() {
     commentInput.addEventListener("input", update);
     roleSelect.addEventListener("change", update);
     shapeSelect.addEventListener("change", update);
+
+    const applyNodeStyle = debounce(() => {
+      const fill = normalizeHexColor(fillInput.value);
+      const stroke = normalizeHexColor(strokeInput.value);
+      const color = normalizeHexColor(textColorInput.value);
+      if (fillInput.value && !fill) fillInput.classList.add("invalid");
+      else fillInput.classList.remove("invalid");
+      if (strokeInput.value && !stroke) strokeInput.classList.add("invalid");
+      else strokeInput.classList.remove("invalid");
+      if (textColorInput.value && !color) textColorInput.classList.add("invalid");
+      else textColorInput.classList.remove("invalid");
+      node.style = { ...(node.style || {}) };
+      if (fill) node.style.fill = fill;
+      else delete node.style.fill;
+      if (stroke) node.style.stroke = stroke;
+      else delete node.style.stroke;
+      if (color) node.style.color = color;
+      else delete node.style.color;
+      if (!Object.keys(node.style).length) delete node.style;
+      renderFromModel();
+      pushHistory();
+      markModelDirty("node style changed");
+    }, 250);
+    fillInput.addEventListener("input", applyNodeStyle);
+    strokeInput.addEventListener("input", applyNodeStyle);
+    textColorInput.addEventListener("input", applyNodeStyle);
+    resetStyleBtn.addEventListener("click", () => {
+      delete node.style;
+      fillInput.value = "";
+      strokeInput.value = "";
+      textColorInput.value = "";
+      fillInput.classList.remove("invalid");
+      strokeInput.classList.remove("invalid");
+      textColorInput.classList.remove("invalid");
+      renderFromModel();
+      pushHistory();
+      markModelDirty("node style reset");
+    });
 
     zoneSelect.addEventListener("change", () => {
       const bid = zoneSelect.value || null;
@@ -1935,9 +2073,52 @@ function renderPropPanel() {
     rowKind.appendChild(kindLabel);
     rowKind.appendChild(kindSelect);
 
+    const rowEdgeStyle = document.createElement("div");
+    rowEdgeStyle.className = "propRow";
+    const edgeStyleLabel = document.createElement("div");
+    edgeStyleLabel.className = "propLabel";
+    edgeStyleLabel.textContent = "Style";
+    const edgeStyleWrap = document.createElement("div");
+    edgeStyleWrap.className = "row";
+    const edgeColor = document.createElement("input");
+    edgeColor.className = "input";
+    edgeColor.placeholder = "color #rrggbb";
+    edgeColor.value = edge?.style?.color || "";
+    edgeColor.disabled = isHover;
+    const edgeWidth = document.createElement("input");
+    edgeWidth.className = "input";
+    edgeWidth.type = "number";
+    edgeWidth.min = "0.5";
+    edgeWidth.max = "12";
+    edgeWidth.step = "0.5";
+    edgeWidth.placeholder = "width";
+    edgeWidth.value = edge?.style?.width != null ? String(edge.style.width) : "";
+    edgeWidth.disabled = isHover;
+    const edgeDashed = document.createElement("label");
+    edgeDashed.className = "toggle";
+    const edgeDashedInput = document.createElement("input");
+    edgeDashedInput.type = "checkbox";
+    edgeDashedInput.checked = edge?.style?.dashed === true;
+    edgeDashedInput.disabled = isHover;
+    const edgeDashedText = document.createElement("span");
+    edgeDashedText.textContent = "Dashed";
+    edgeDashed.appendChild(edgeDashedInput);
+    edgeDashed.appendChild(edgeDashedText);
+    const edgeResetBtn = document.createElement("button");
+    edgeResetBtn.className = "btn";
+    edgeResetBtn.textContent = "Reset";
+    edgeResetBtn.disabled = isHover;
+    edgeStyleWrap.appendChild(edgeColor);
+    edgeStyleWrap.appendChild(edgeWidth);
+    edgeStyleWrap.appendChild(edgeDashed);
+    edgeStyleWrap.appendChild(edgeResetBtn);
+    rowEdgeStyle.appendChild(edgeStyleLabel);
+    rowEdgeStyle.appendChild(edgeStyleWrap);
+
     if (inspectorBody) {
       inspectorBody.appendChild(rowLabel);
       inspectorBody.appendChild(rowKind);
+      inspectorBody.appendChild(rowEdgeStyle);
     }
 
     const update = debounce(() => {
@@ -1945,9 +2126,43 @@ function renderPropPanel() {
       edge.kind = kindSelect.value;
       renderFromModel();
       pushHistory();
+      markModelDirty("edge property changed");
     }, 300);
     labelInput.addEventListener("input", update);
     kindSelect.addEventListener("change", update);
+    const applyEdgeStyle = debounce(() => {
+      const color = normalizeHexColor(edgeColor.value);
+      const width = normalizeEdgeWidth(edgeWidth.value);
+      if (edgeColor.value && !color) edgeColor.classList.add("invalid");
+      else edgeColor.classList.remove("invalid");
+      if (edgeWidth.value && !width) edgeWidth.classList.add("invalid");
+      else edgeWidth.classList.remove("invalid");
+      edge.style = { ...(edge.style || {}) };
+      if (color) edge.style.color = color;
+      else delete edge.style.color;
+      if (width) edge.style.width = width;
+      else delete edge.style.width;
+      if (edgeDashedInput.checked) edge.style.dashed = true;
+      else delete edge.style.dashed;
+      if (!Object.keys(edge.style).length) delete edge.style;
+      renderFromModel();
+      pushHistory();
+      markModelDirty("edge style changed");
+    }, 250);
+    edgeColor.addEventListener("input", applyEdgeStyle);
+    edgeWidth.addEventListener("input", applyEdgeStyle);
+    edgeDashedInput.addEventListener("change", applyEdgeStyle);
+    edgeResetBtn.addEventListener("click", () => {
+      delete edge.style;
+      edgeColor.value = "";
+      edgeWidth.value = "";
+      edgeDashedInput.checked = false;
+      edgeColor.classList.remove("invalid");
+      edgeWidth.classList.remove("invalid");
+      renderFromModel();
+      pushHistory();
+      markModelDirty("edge style reset");
+    });
   }
   updateInspectorState();
 }
@@ -2208,6 +2423,11 @@ function attachNodeInteractions(svg) {
     const id = getNodeIdFromElement(g);
     const node = state.model.nodes.find((n) => n.id === id);
     if (!node) return;
+    devLog("drag:start", {
+      nodeId: id,
+      pinnedOffset: getPinnedOffset(node),
+      syncRev: state.syncRev
+    });
     dragNode = { g, id, node };
     startX = evt.clientX;
     startY = evt.clientY;
@@ -2266,11 +2486,30 @@ function attachNodeInteractions(svg) {
     if (!dragNode) return;
     dragNode.g.releasePointerCapture(evt.pointerId);
     const id = dragNode.id;
+    const finalOffset = getPinnedOffset(dragNode.node);
     dragNode = null;
+    devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
     selectNodeById(id);
     pushHistory();
     renderFromModel();
     markModelDirty("node position changed");
+  });
+}
+
+function runPostRenderHook(svgEl) {
+  if (!svgEl) {
+    devLog("postRenderHook:svg missing");
+    return;
+  }
+  applyNodePositions(svgEl);
+  attachNodeInteractions(svgEl);
+  applyConnectHandles(svgEl);
+  applySelection(svgEl);
+  const mapped = Array.from(svgEl.querySelectorAll("g.node")).filter((g) => !!getNodeIdFromGroup(g)).length;
+  devLog("postRenderHook", {
+    svgFound: true,
+    nodeElements: svgEl.querySelectorAll("g.node").length,
+    mapped
   });
 }
 
@@ -2307,10 +2546,7 @@ async function renderMermaid(text, { expectedRev = null } = {}) {
         svgEl.setAttribute("height", String(parts[3]));
       }
     }
-    applyNodePositions(svgEl);
-    attachNodeInteractions(svgEl);
-    applyConnectHandles(svgEl);
-    applySelection(svgEl);
+    runPostRenderHook(svgEl);
     state.lastSvgText = svgEl.outerHTML;
     if (!state.textDirty && state.parseWarnings.length === 0 && !state.outOfSync) {
       setStatus("ok", "ready");
@@ -2320,6 +2556,8 @@ async function renderMermaid(text, { expectedRev = null } = {}) {
     if (expectedRev !== null && !isLatestRev(expectedRev)) return;
     if (state.lastSvgText) {
       container.innerHTML = state.lastSvgText;
+      const svgEl = container.querySelector("svg");
+      runPostRenderHook(svgEl);
     }
     setProblems([parseMermaidError(err)], { status: "error", open: true });
     console.error(err);
@@ -2464,9 +2702,10 @@ function wireToolbar() {
   });
 
   els.btnRelayout.addEventListener("click", () => {
-    state.model.nodes = state.model.nodes.map((n) => ({ ...n, pinned: false, position: null, pinnedOffset: null }));
-    pushHistory();
+    // Re-layout should keep pinned offsets by default.
+    // (Reset pins can be introduced as a separate action.)
     renderFromModel();
+    markModelDirty("re-layout requested");
   });
 
   if (els.btnConnect) {
