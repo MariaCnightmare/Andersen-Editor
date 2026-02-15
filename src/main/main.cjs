@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, screen, clipboard, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { installAppMenu, wireMenuStateIpc } = require("./appMenu");
+const { installAppMenu, wireMenuStateIpc } = require("./appMenu.cjs");
 const { summarizeGpuStatus, summarizeGpuInfo, formatDiagnosticsText } = require("./gpuDiagnostics");
 
 let mainWindow = null;
