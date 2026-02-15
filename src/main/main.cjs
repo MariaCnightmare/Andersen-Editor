@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, screen, clipboard, shell } = requir
 const path = require("path");
 const fs = require("fs");
 const { installAppMenu, wireMenuStateIpc } = require("./appMenu.cjs");
-const { summarizeGpuStatus, summarizeGpuInfo, formatDiagnosticsText } = require("./gpuDiagnostics");
+const { summarizeGpuStatus, summarizeGpuInfo, formatDiagnosticsText } = require("./gpuDiagnostics.cjs");
 
 let mainWindow = null;
 const isWsl = !!(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
