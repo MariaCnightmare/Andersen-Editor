@@ -2130,6 +2130,7 @@ function applyNodePositions(svg) {
   for (const g of nodes) {
     const id = getNodeIdFromGroup(g);
     if (!id) continue;
+    g.dataset.aeNodeId = id;
     mapped += 1;
     const modelNode = state.model.nodes.find((n) => n.id === id);
     const base = parseTranslate(g.getAttribute("transform"));
@@ -3083,6 +3084,10 @@ function attachNodeInteractions(svg) {
         addEdgeByNodes(state.connectFromNodeId, fromId);
       }
       state.connectFromNodeId = null;
+      return;
+    }
+    if (state.connectMode) {
+      // In connect mode, only connector-handle clicks are used for edge creation.
       return;
     }
     const g = evt.target.closest("g.node");
