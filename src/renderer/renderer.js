@@ -422,7 +422,8 @@ function addCtxGroup(container, label, items) {
 
 function requestTextInput(title, defaultValue = "") {
   if (!els.textPromptDialog || !els.textPromptInput || !els.textPromptTitle) {
-    return Promise.resolve(null);
+    const picked = window.prompt(title || "Input", defaultValue || "");
+    return Promise.resolve(picked == null ? null : String(picked).trim());
   }
   return new Promise((resolve) => {
     const close = (value) => {
@@ -2951,7 +2952,17 @@ function attachNodeInteractions(svg) {
           el.dataset.aeEdgeId = edge.id;
         });
         edgeLabelMap.set(edge.id, labelG);
+        labelG.addEventListener("dblclick", (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          void openEdgeLabelEditor(edge.id);
+        });
       }
+      g.addEventListener("dblclick", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        void openEdgeLabelEditor(edge.id);
+      });
     } else {
       g.dataset.aeEdgeAmbiguous = "1";
     }
@@ -3050,6 +3061,11 @@ function attachNodeInteractions(svg) {
       if (e.from === nodeId || e.to === nodeId) syncEdgeGeometryById(e.id);
     }
   };
+
+  const syncAllEdges = () => {
+    for (const e of state.model.edges) syncEdgeGeometryById(e.id);
+  };
+  syncAllEdges();
 
   const updateDragOverlay = () => {
     if (!dragNode?.active) return;
@@ -3185,7 +3201,10 @@ function attachNodeInteractions(svg) {
       pushHistory();
       syncConnectedEdges(id);
       clearDragOverlay();
-      renderFromModel();
+      renderLists();
+      renderPropPanel();
+      applySelection(svg);
+      highlightList();
       markModelDirty("node position changed");
       return;
     }
