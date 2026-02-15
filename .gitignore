@@ -4,3 +4,6 @@ dist/
 
 # deps
 node_modules/
+
+# python venv
+.venv/
