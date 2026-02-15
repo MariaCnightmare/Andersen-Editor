@@ -3063,10 +3063,14 @@ function attachNodeInteractions(svg) {
   const getNodeCenter = (nodeId) => {
     const nodeGroup = Array.from(svg.querySelectorAll("g.node")).find((x) => getNodeIdFromGroup(x) === nodeId);
     if (!nodeGroup) return null;
-    const rect = nodeGroup.getBoundingClientRect();
-    const centerClientX = rect.left + rect.width / 2;
-    const centerClientY = rect.top + rect.height / 2;
-    return clientToSvg(svg, centerClientX, centerClientY);
+    const box = nodeGroup.getBBox();
+    const local = svg.createSVGPoint();
+    local.x = box.x + box.width / 2;
+    local.y = box.y + box.height / 2;
+    const ctm = nodeGroup.getCTM();
+    if (!ctm) return null;
+    const global = local.matrixTransform(ctm);
+    return { x: global.x, y: global.y };
   };
 
   const clearDragOverlay = () => {
