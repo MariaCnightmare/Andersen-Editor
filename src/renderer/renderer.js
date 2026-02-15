@@ -2865,6 +2865,8 @@ function attachNodeInteractions(svg) {
 
   const edgePaths = svg.querySelectorAll("g.edgePath");
   const edgeLabels = svg.querySelectorAll("g.edgeLabel");
+  const edgePathMap = new Map();
+  const edgeLabelMap = new Map();
   const candidatesByKey = new Map();
   for (const edge of state.model.edges) {
     const key = `${edge.from}|${edge.to}|${edge.label || ""}`;
@@ -2937,6 +2939,12 @@ function attachNodeInteractions(svg) {
     }
     if (edge) {
       g.dataset.aeEdgeId = edge.id;
+      edgePathMap.set(edge.id, g);
+      const labelG = edgeLabels[idx];
+      if (labelG) {
+        labelG.dataset.aeEdgeId = edge.id;
+        edgeLabelMap.set(edge.id, labelG);
+      }
     } else {
       g.dataset.aeEdgeAmbiguous = "1";
     }
@@ -2970,21 +2978,16 @@ function attachNodeInteractions(svg) {
         renderPropPanel();
       }
     });
-    g.addEventListener("dblclick", (evt) => {
-      evt.preventDefault();
-      evt.stopPropagation();
-      if (!g.dataset.aeEdgeId) return;
-      void openEdgeLabelEditor(g.dataset.aeEdgeId);
-    });
-    const labelG = edgeLabels[idx];
-    if (labelG) {
-      labelG.addEventListener("dblclick", (evt) => {
-        evt.preventDefault();
-        evt.stopPropagation();
-        if (!g.dataset.aeEdgeId) return;
-        void openEdgeLabelEditor(g.dataset.aeEdgeId);
-      });
-    }
+  });
+
+  svg.addEventListener("dblclick", (evt) => {
+    const host = evt.target.closest("g.edgePath, g.edgeLabel");
+    if (!host) return;
+    const edgeId = host.dataset.aeEdgeId;
+    if (!edgeId) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    void openEdgeLabelEditor(edgeId);
   });
 
   let dragNode = null;
@@ -3002,6 +3005,31 @@ function attachNodeInteractions(svg) {
   const clearDragOverlay = () => {
     for (const line of dragOverlayLines) line.remove();
     dragOverlayLines = [];
+  };
+
+  const syncEdgeGeometryById = (edgeId) => {
+    const edge = state.model.edges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const edgeGroup = edgePathMap.get(edgeId);
+    if (!edgeGroup) return;
+    const path = edgeGroup.querySelector("path");
+    if (!path) return;
+    const from = getNodeCenter(edge.from);
+    const to = getNodeCenter(edge.to);
+    if (!from || !to) return;
+    path.setAttribute("d", `M ${from.x},${from.y} L ${to.x},${to.y}`);
+    const labelG = edgeLabelMap.get(edgeId);
+    if (labelG) {
+      const mx = (from.x + to.x) / 2;
+      const my = (from.y + to.y) / 2;
+      labelG.setAttribute("transform", `translate(${mx}, ${my})`);
+    }
+  };
+
+  const syncConnectedEdges = (nodeId) => {
+    for (const e of state.model.edges) {
+      if (e.from === nodeId || e.to === nodeId) syncEdgeGeometryById(e.id);
+    }
   };
 
   const updateDragOverlay = () => {
@@ -3112,6 +3140,7 @@ function attachNodeInteractions(svg) {
     const next = { x: targetX - dragNode.baseX, y: targetY - dragNode.baseY };
     setPinnedOffset(dragNode.node, next);
     setNodeTransform(dragNode.g, targetX, targetY);
+    syncConnectedEdges(dragNode.id);
     updateDragOverlay();
   });
 
@@ -3131,6 +3160,7 @@ function attachNodeInteractions(svg) {
       devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
       selectNodeById(id);
       pushHistory();
+      syncConnectedEdges(id);
       clearDragOverlay();
       renderFromModel();
       markModelDirty("node position changed");

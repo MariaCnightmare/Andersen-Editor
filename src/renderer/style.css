@@ -851,6 +851,11 @@ body.connect-mode #previewWrap * {
   pointer-events: none;
 }
 
+.preview svg g.edgePath path,
+.preview svg g.edgeLabel {
+  pointer-events: auto;
+}
+
 .inspector .badge {
   font-size: 10px;
   padding: 1px 6px;
