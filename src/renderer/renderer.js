@@ -2869,6 +2869,7 @@ function attachNodeInteractions(svg) {
   const edgeLabels = svg.querySelectorAll("g.edgeLabel");
   const edgePathMap = new Map();
   const edgeLabelMap = new Map();
+  const mappedEdgeIds = new Set();
   const candidatesByKey = new Map();
   for (const edge of state.model.edges) {
     const key = `${edge.from}|${edge.to}|${edge.label || ""}`;
@@ -2947,8 +2948,14 @@ function attachNodeInteractions(svg) {
         }
       }
     }
-    if (!edge && state.model.edges[idx]) edge = state.model.edges[idx];
+    if (!edge && state.model.edges[idx] && !mappedEdgeIds.has(state.model.edges[idx].id)) {
+      edge = state.model.edges[idx];
+    }
+    if (!edge) {
+      edge = state.model.edges.find((e) => !mappedEdgeIds.has(e.id)) || null;
+    }
     if (edge) {
+      mappedEdgeIds.add(edge.id);
       g.dataset.aeEdgeId = edge.id;
       g.querySelectorAll("*").forEach((el) => {
         el.dataset.aeEdgeId = edge.id;
@@ -3048,8 +3055,26 @@ function attachNodeInteractions(svg) {
     const from = getNodeCenter(edge.from);
     const to = getNodeCenter(edge.to);
     if (!from || !to) return;
-    const d = `M ${from.x},${from.y} L ${to.x},${to.y}`;
-    paths.forEach((p) => p.setAttribute("d", d));
+    const toLocal = (el, pt) => {
+      try {
+        const ctm = el.getCTM();
+        if (!ctm) return pt;
+        const inv = ctm.inverse();
+        const sp = svg.createSVGPoint();
+        sp.x = pt.x;
+        sp.y = pt.y;
+        const lp = sp.matrixTransform(inv);
+        return { x: lp.x, y: lp.y };
+      } catch {
+        return pt;
+      }
+    };
+    paths.forEach((p) => {
+      const lf = toLocal(p, from);
+      const lt = toLocal(p, to);
+      const d = `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`;
+      p.setAttribute("d", d);
+    });
     const labelG = edgeLabelMap.get(edgeId);
     if (labelG) {
       const mx = (from.x + to.x) / 2;
@@ -3057,7 +3082,8 @@ function attachNodeInteractions(svg) {
       if (!labelG.dataset.aeOrigTransform) {
         labelG.dataset.aeOrigTransform = labelG.getAttribute("transform") || "";
       }
-      labelG.setAttribute("transform", `translate(${mx},${my})`);
+      const localMid = toLocal(labelG, { x: mx, y: my });
+      labelG.setAttribute("transform", `translate(${localMid.x},${localMid.y})`);
     }
   };
 
