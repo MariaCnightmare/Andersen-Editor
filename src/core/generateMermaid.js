@@ -7,10 +7,32 @@ import {
   normalizeNodeClassName
 } from "./className.mjs";
 
+function normalizeUnsafeText(s) {
+  return String(s ?? "")
+    .replace(/\r?\n/g, " ")
+    .replace(/%%/g, "％％")
+    .replace(/\|/g, "¦")
+    .replace(/"/g, "”");
+}
+
+function sanitizeNodeLabel(s) {
+  const t = normalizeUnsafeText(s);
+  // Mermaid token delimiters for node shapes
+  return t
+    .replace(/\[/g, "(")
+    .replace(/\]/g, ")")
+    .replace(/\{/g, "(")
+    .replace(/\}/g, ")");
+}
+
+function sanitizeEdgeLabel(s) {
+  const t = normalizeUnsafeText(s);
+  // Edge labels are wrapped by |...|
+  return t.replace(/\|/g, "¦");
+}
+
 function sanitizeLabel(s) {
-  const t = String(s ?? "");
-  // Mermaidのブラケットを壊しにくくする最低限のサニタイズ
-  return t.replace(/\r?\n/g, " ").replace(/\]/g, ")").replace(/\[/g, "(");
+  return sanitizeNodeLabel(s);
 }
 
 function normalizeColorToken(value) {
@@ -28,7 +50,7 @@ function normalizeStrokeWidth(value) {
 }
 
 function nodeShape(shape, label) {
-  const L = sanitizeLabel(label);
+  const L = sanitizeNodeLabel(label);
   switch (shape) {
     case "rect":
       return `[${L}]`;
@@ -109,7 +131,7 @@ export function generateMermaid(model, pack, theme) {
   m.edges.forEach((e, idx) => {
     const ek = pack.edgeKinds[e.kind];
     const arrow = ek ? ek.arrow : "-->";
-    const label = sanitizeLabel(e.label || "");
+    const label = sanitizeEdgeLabel(e.label || "");
     if (label) {
       lines.push(`  ${e.from} ${arrow}|${label}| ${e.to}`);
     } else {

@@ -49,6 +49,7 @@ const state = {
   showInternalBlocks: false,
   devMode: false,
   connectMode: false,
+  connectFromNodeId: null,
   inspectorVisible: false,
   prevRawBlocks: null,
   mermaid: null,
@@ -613,6 +614,7 @@ function setInspectorHeader(title, badgeText, badgeClass = "") {
 
 function setConnectMode(on) {
   state.connectMode = !!on;
+  if (!state.connectMode) state.connectFromNodeId = null;
   document.body.classList.toggle("connect-mode", state.connectMode);
   if (els.btnConnect) els.btnConnect.classList.toggle("active", state.connectMode);
   const svg = els.preview.querySelector("svg");
@@ -1188,12 +1190,22 @@ function getEditorBaseText() {
 }
 
 function getFullSourceForOutput() {
-  const base = getEditorBaseText();
-  if (state.showInternalBlocks) return base;
-  const internal = buildInternalBlocksText(state.model?.rawBlocks || []);
+  const base = stripInternalBlocks(getEditorBaseText());
+  const normalized = [];
+  let initKept = false;
+  for (const line of String(base || "").split(/\r?\n/)) {
+    const t = line.trim();
+    if (/^%%AE:MODEL\b/.test(t)) continue;
+    if (/^%%\{.*\}%%$/.test(t)) {
+      if (initKept) continue;
+      initKept = true;
+    }
+    normalized.push(line);
+  }
   const modelLine = state.model ? embedModelComment(state.model) : "";
-  const parts = [base.trimEnd()];
+  const parts = [normalized.join("\n").trimEnd()];
   if (modelLine) parts.push(modelLine);
+  const internal = buildInternalBlocksText(state.model?.rawBlocks || []);
   if (internal) parts.push(internal);
   return parts.join("\n") + "\n";
 }
@@ -1537,6 +1549,18 @@ function boundaryPrefix(role) {
     default:
       return "B";
   }
+}
+
+function addEdgeByNodes(from, to, { kind = null, label = "" } = {}) {
+  if (!from || !to || from === to) return false;
+  const ids = new Set(state.model.edges.map((e) => e.id));
+  const id = nextId("E", ids);
+  const edgeKind = kind || Object.keys(state.pack.edgeKinds || {})[0] || "http";
+  state.model.edges.push({ id, from, to, kind: edgeKind, label: String(label || "") });
+  pushHistory();
+  renderFromModel();
+  markModelDirty("edge added");
+  return true;
 }
 
 function refreshSelectors() {
@@ -2198,7 +2222,6 @@ function clientToSvg(svg, clientX, clientY) {
 
 function applyConnectHandles(svg) {
   svg.querySelectorAll("circle.ae-handle").forEach((n) => n.remove());
-  svg.querySelectorAll("line.ae-temp-edge").forEach((n) => n.remove());
   if (!state.connectMode) return;
   const nodes = svg.querySelectorAll("g.node");
   for (const g of nodes) {
@@ -2219,6 +2242,9 @@ function applyConnectHandles(svg) {
       c.setAttribute("cy", String(p.y));
       c.dataset.nodeId = id;
       c.dataset.side = p.side;
+      if (state.connectFromNodeId && state.connectFromNodeId === id) {
+        c.classList.add("ae-handle-src");
+      }
       g.appendChild(c);
     }
   }
@@ -2885,6 +2911,18 @@ function attachNodeInteractions(svg) {
     return { from, to, label };
   };
 
+  const openEdgeLabelEditor = async (edgeId) => {
+    const edge = edgeId ? state.model.edges.find((e) => e.id === edgeId) : null;
+    if (!edge) return;
+    const next = await requestTextInput("Edge label", edge.label || "");
+    if (next == null) return;
+    edge.label = next;
+    selectEdgeById(edge.id);
+    renderFromModel();
+    pushHistory();
+    markModelDirty("edge label changed");
+  };
+
   edgePaths.forEach((g, idx) => {
     const sig = parseEdgeSignature(g, idx);
     let edge = null;
@@ -2932,12 +2970,58 @@ function attachNodeInteractions(svg) {
         renderPropPanel();
       }
     });
+    g.addEventListener("dblclick", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      if (!g.dataset.aeEdgeId) return;
+      void openEdgeLabelEditor(g.dataset.aeEdgeId);
+    });
+    const labelG = edgeLabels[idx];
+    if (labelG) {
+      labelG.addEventListener("dblclick", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        if (!g.dataset.aeEdgeId) return;
+        void openEdgeLabelEditor(g.dataset.aeEdgeId);
+      });
+    }
   });
 
   let dragNode = null;
   const DRAG_THRESHOLD_PX = 2;
+  let dragOverlayLines = [];
 
-  let connectDrag = null;
+  const getNodeCenter = (nodeId) => {
+    const nodeGroup = Array.from(svg.querySelectorAll("g.node")).find((x) => getNodeIdFromGroup(x) === nodeId);
+    if (!nodeGroup) return null;
+    const box = nodeGroup.getBBox();
+    const t = parseTranslate(nodeGroup.getAttribute("transform"));
+    return { x: t.x + box.width / 2, y: t.y + box.height / 2 };
+  };
+
+  const clearDragOverlay = () => {
+    for (const line of dragOverlayLines) line.remove();
+    dragOverlayLines = [];
+  };
+
+  const updateDragOverlay = () => {
+    if (!dragNode?.active) return;
+    clearDragOverlay();
+    const connected = state.model.edges.filter((e) => e.from === dragNode.id || e.to === dragNode.id);
+    for (const edge of connected) {
+      const from = getNodeCenter(edge.from);
+      const to = getNodeCenter(edge.to);
+      if (!from || !to) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "ae-temp-edge");
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y));
+      svg.appendChild(line);
+      dragOverlayLines.push(line);
+    }
+  };
 
   svg.addEventListener("pointerdown", (evt) => {
     if (evt.button !== 0) return;
@@ -2947,20 +3031,30 @@ function attachNodeInteractions(svg) {
       evt.stopPropagation();
       const fromId = handle.dataset.nodeId;
       if (!fromId) return;
-      const pt = clientToSvg(svg, evt.clientX, evt.clientY);
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("class", "ae-temp-edge");
-      line.setAttribute("x1", String(pt.x));
-      line.setAttribute("y1", String(pt.y));
-      line.setAttribute("x2", String(pt.x));
-      line.setAttribute("y2", String(pt.y));
-      svg.appendChild(line);
-      connectDrag = {
-        fromId,
-        line,
-        rewireEdgeId: state.selectedEdgeId || null
-      };
-      handle.setPointerCapture(evt.pointerId);
+      if (!state.connectFromNodeId) {
+        state.connectFromNodeId = fromId;
+        selectNodeById(fromId);
+        applyConnectHandles(svg);
+        return;
+      }
+      if (state.connectFromNodeId === fromId) {
+        state.connectFromNodeId = null;
+        applyConnectHandles(svg);
+        return;
+      }
+      if (state.selectedEdgeId) {
+        const edge = state.model.edges.find((e) => e.id === state.selectedEdgeId);
+        if (edge) {
+          edge.from = state.connectFromNodeId;
+          edge.to = fromId;
+          pushHistory();
+          renderFromModel();
+          markModelDirty("edge rewired");
+        }
+      } else {
+        addEdgeByNodes(state.connectFromNodeId, fromId);
+      }
+      state.connectFromNodeId = null;
       return;
     }
     const g = evt.target.closest("g.node");
@@ -2995,12 +3089,6 @@ function attachNodeInteractions(svg) {
   });
 
   svg.addEventListener("pointermove", (evt) => {
-    if (connectDrag) {
-      const pt = clientToSvg(svg, evt.clientX, evt.clientY);
-      connectDrag.line.setAttribute("x2", String(pt.x));
-      connectDrag.line.setAttribute("y2", String(pt.y));
-      return;
-    }
     if (!dragNode) return;
     if (evt.pointerId !== dragNode.pointerId) return;
     dragNode.lastClientX = evt.clientX;
@@ -3024,38 +3112,10 @@ function attachNodeInteractions(svg) {
     const next = { x: targetX - dragNode.baseX, y: targetY - dragNode.baseY };
     setPinnedOffset(dragNode.node, next);
     setNodeTransform(dragNode.g, targetX, targetY);
+    updateDragOverlay();
   });
 
   svg.addEventListener("pointerup", (evt) => {
-    if (connectDrag) {
-      const line = connectDrag.line;
-      if (line) line.remove();
-      const el = document.elementFromPoint(evt.clientX, evt.clientY);
-      const g = el ? el.closest("g.node") : null;
-      const toId = g ? getNodeIdFromElement(g) : null;
-      if (toId && toId !== connectDrag.fromId) {
-        if (connectDrag.rewireEdgeId) {
-          const edge = state.model.edges.find((e) => e.id === connectDrag.rewireEdgeId);
-          if (edge) {
-            edge.from = connectDrag.fromId;
-            edge.to = toId;
-            pushHistory();
-            renderFromModel();
-            markModelDirty("edge rewired");
-          }
-        } else {
-          const ids = new Set(state.model.edges.map((e) => e.id));
-          const id = nextId("E", ids);
-          const kind = Object.keys(state.pack.edgeKinds || {})[0] || "http";
-          state.model.edges.push({ id, from: connectDrag.fromId, to: toId, kind, label: "" });
-          pushHistory();
-          renderFromModel();
-          markModelDirty("edge added");
-        }
-      }
-      connectDrag = null;
-      return;
-    }
     if (!dragNode) return;
     if (evt.pointerId !== dragNode.pointerId) return;
     const id = dragNode.id;
@@ -3071,11 +3131,22 @@ function attachNodeInteractions(svg) {
       devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
       selectNodeById(id);
       pushHistory();
+      clearDragOverlay();
       renderFromModel();
       markModelDirty("node position changed");
       return;
     }
+    clearDragOverlay();
     dragNode.g.releasePointerCapture(evt.pointerId);
+    dragNode = null;
+  });
+
+  svg.addEventListener("pointercancel", (evt) => {
+    if (!dragNode || evt.pointerId !== dragNode.pointerId) return;
+    clearDragOverlay();
+    try {
+      dragNode.g.releasePointerCapture(evt.pointerId);
+    } catch {}
     dragNode = null;
   });
 }
@@ -4069,13 +4140,8 @@ function wireModelControls() {
     const kind = els.selEdgeKind.value;
     if (!from || !to || !kind) return;
     const label = (els.txtEdgeLabel.value || "").trim();
-    const ids = new Set(state.model.edges.map((e) => e.id));
-    const id = nextId("E", ids);
-    state.model.edges.push({ id, from, to, kind, label });
+    addEdgeByNodes(from, to, { kind, label });
     els.txtEdgeLabel.value = "";
-    pushHistory();
-    renderFromModel();
-    markModelDirty("edge added");
   });
 }
 
@@ -4100,6 +4166,11 @@ function wireKeys() {
       if (state.selectedNodeId) centerOnSelected();
     }
     if (key === "escape") {
+      if (state.connectFromNodeId) {
+        state.connectFromNodeId = null;
+        const svg = els.preview.querySelector("svg");
+        if (svg) applyConnectHandles(svg);
+      }
       state.selectedNodeId = null;
       state.selectedEdgeId = null;
       renderPropPanel();

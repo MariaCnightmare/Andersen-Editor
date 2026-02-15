@@ -764,6 +764,12 @@ body.connect-mode #previewWrap {
   cursor: crosshair;
 }
 
+body.connect-mode #previewWrap,
+body.connect-mode #previewWrap * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 #previewWrap .previewZoom,
 #previewWrap .previewZoom * {
   cursor: default;
@@ -831,6 +837,11 @@ body.connect-mode #previewWrap {
 }
 .preview svg .ae-handle:hover {
   fill: #ffd36b;
+}
+
+.preview svg .ae-handle.ae-handle-src {
+  fill: #ffd36b;
+  stroke: #7a4f00;
 }
 
 .preview svg .ae-temp-edge {
