@@ -3228,10 +3228,7 @@ function attachNodeInteractions(svg) {
       pushHistory();
       syncConnectedEdges(id);
       clearDragOverlay();
-      renderLists();
-      renderPropPanel();
-      applySelection(svg);
-      highlightList();
+      renderFromModel({ updateSource: false, preserveWarnings: true });
       markModelDirty("node position changed");
       return;
     }
