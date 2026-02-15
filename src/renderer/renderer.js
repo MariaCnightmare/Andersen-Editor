@@ -3059,6 +3059,7 @@ function attachNodeInteractions(svg) {
   const DRAG_THRESHOLD_PX = 2;
   let dragOverlayLines = [];
   const liveMutatedPaths = new Map();
+  const liveMutatedLabels = new Map();
   const getNodeCenter = (nodeId) => {
     const nodeGroup = Array.from(svg.querySelectorAll("g.node")).find((x) => getNodeIdFromGroup(x) === nodeId);
     if (!nodeGroup) return null;
@@ -3099,6 +3100,25 @@ function attachNodeInteractions(svg) {
     pathEl.setAttribute("d", `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`);
   };
 
+  const moveEdgeLabelToPathMid = (edgeId, pathEl, { trackRestore = false } = {}) => {
+    const labelG = edgeLabelMap.get(edgeId);
+    if (!labelG || !pathEl?.getPointAtLength) return;
+    if (trackRestore && !liveMutatedLabels.has(labelG)) {
+      liveMutatedLabels.set(labelG, labelG.getAttribute("transform") || "");
+    }
+    const len = pathEl.getTotalLength();
+    if (!Number.isFinite(len) || len <= 0) return;
+    const mid = pathEl.getPointAtLength(len / 2);
+    const ctm = pathEl.getCTM();
+    if (!ctm) return;
+    const lp = svg.createSVGPoint();
+    lp.x = mid.x;
+    lp.y = mid.y;
+    const global = lp.matrixTransform(ctm);
+    const localMid = toLocalPoint(labelG, { x: global.x, y: global.y });
+    labelG.setAttribute("transform", `translate(${localMid.x},${localMid.y})`);
+  };
+
   const updateConnectedEdgesLive = (nodeId) => {
     const connected = state.model.edges.filter((e) => e.from === nodeId || e.to === nodeId);
     for (const edge of connected) {
@@ -3118,6 +3138,9 @@ function attachNodeInteractions(svg) {
         }
         setPathDForEndpoints(p, from, to);
       }
+      if (paths[0]) {
+        moveEdgeLabelToPathMid(edge.id, paths[0], { trackRestore: true });
+      }
     }
   };
 
@@ -3127,7 +3150,11 @@ function attachNodeInteractions(svg) {
       p.setAttribute("d", meta?.d || "");
       p.setAttribute("transform", meta?.transform || "");
     }
+    for (const [g, t] of liveMutatedLabels.entries()) {
+      if (g?.isConnected) g.setAttribute("transform", t || "");
+    }
     liveMutatedPaths.clear();
+    liveMutatedLabels.clear();
   };
 
   const syncPinnedNodeEdges = () => {
@@ -3148,6 +3175,9 @@ function attachNodeInteractions(svg) {
         host.tagName?.toLowerCase() === "path" ? [host] : Array.from(host.querySelectorAll("path"));
       for (const p of paths) {
         setPathDForEndpoints(p, from, to);
+      }
+      if (paths[0]) {
+        moveEdgeLabelToPathMid(edge.id, paths[0], { trackRestore: false });
       }
     }
   };
