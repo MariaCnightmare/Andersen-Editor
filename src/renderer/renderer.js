@@ -1219,15 +1219,44 @@ function formatMermaid(text) {
 }
 
 async function readJson(relPath) {
-  if (!window.api?.readAssetText) {
-    throw new Error("preload api unavailable: readAssetText");
-  }
   if (!relPath) {
     throw new Error("readJson path is empty");
   }
-  const res = await window.api.readAssetText(relPath);
-  if (!res.ok) throw new Error(res.error || `Failed to read ${relPath}`);
-  return JSON.parse(res.content);
+  let route = "none";
+  try {
+    if (window.api?.readAssetJson) {
+      route = "readAssetJson";
+      const res = await window.api.readAssetJson(relPath);
+      if (res && typeof res === "object" && Object.prototype.hasOwnProperty.call(res, "ok")) {
+        if (!res.ok) throw new Error(res.error || `Failed to read ${relPath}`);
+        return res.content;
+      }
+      return res;
+    }
+
+    if (window.api?.readAssetText) {
+      route = "readAssetText";
+      const res = await window.api.readAssetText(relPath);
+      const isWrapped = !!(res && typeof res === "object" && Object.prototype.hasOwnProperty.call(res, "ok"));
+      if (isWrapped && !res.ok) throw new Error(res.error || `Failed to read ${relPath}`);
+      const text = isWrapped ? res.content : res;
+      if (typeof text !== "string") {
+        throw new Error(`Invalid readAssetText response for ${relPath}`);
+      }
+      return JSON.parse(text);
+    }
+
+    route = "fetch";
+    const url = new URL(String(relPath).replace(/^\/+/, ""), location.origin + "/");
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText} ${response.url}`);
+    }
+    return await response.json();
+  } catch (err) {
+    console.warn("[boot] readJson failed", { route, relPath, error: err?.message || err });
+    throw err;
+  }
 }
 
 async function getMermaid() {

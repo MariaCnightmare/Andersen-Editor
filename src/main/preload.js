@@ -13,6 +13,18 @@ function onMenuAction(callback) {
 
 contextBridge.exposeInMainWorld("api", {
   readAssetText: (relPath) => ipcRenderer.invoke("asset:readText", relPath),
+  readAssetJson: async (relPath) => {
+    const res = await ipcRenderer.invoke("asset:readText", relPath);
+    if (!res?.ok) return res;
+    try {
+      return { ok: true, content: JSON.parse(res.content) };
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Invalid JSON: ${relPath} (${err?.message || err})`
+      };
+    }
+  },
 
   openMmd: () => ipcRenderer.invoke("dialog:openMmd"),
   saveMmdAs: (args) => ipcRenderer.invoke("dialog:saveMmdAs", args),
