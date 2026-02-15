@@ -386,13 +386,7 @@
     <span class="mono" id="fileInfo">未保存</span>
   </footer>
 
-  <script>
-    if (!window.api) {
-      const shim = document.createElement("script");
-      shim.src = "./api-shim.js";
-      document.head.appendChild(shim);
-    }
-  </script>
+  <script src="./api-shim.js"></script>
   <script type="module" src="./renderer.js"></script>
 </body>
 </html>

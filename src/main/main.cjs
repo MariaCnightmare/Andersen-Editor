@@ -182,7 +182,8 @@ function createWindow() {
     webPreferences: {
       contextIsolation: !simpleUi,
       nodeIntegration: simpleUi,
-      preload: simpleUi ? undefined : path.join(__dirname, "preload.cjs")
+      preload: simpleUi ? undefined : path.join(__dirname, "preload.cjs"),
+      sandbox: false
     }
   });
 

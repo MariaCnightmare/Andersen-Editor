@@ -9,12 +9,18 @@
  *   - Use no-store to avoid stale cache in diagnostics/debug runs.
  */
 (() => {
+  if (window.api?.readAssetText && window.api?.readAssetJson) {
+    console.info("[api-shim] skipped (window.api already available)");
+    return;
+  }
+
   const normalizeUrl = (relPath) => {
     const stripped = String(relPath || "")
       .trim()
       .replace(/^\.\//, "")
       .replace(/^\/+/, "");
-    return new URL(stripped, location.origin + "/");
+    const base = location.protocol === "file:" ? location.href : location.origin + "/";
+    return new URL(stripped, base);
   };
 
   const preview = (text) => String(text || "").slice(0, 120).replace(/\s+/g, " ");
