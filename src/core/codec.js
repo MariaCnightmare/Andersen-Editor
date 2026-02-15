@@ -68,9 +68,72 @@ export function safeJsonParse(str, fallback = null) {
   }
 }
 
+function pickDefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v === undefined || v === null || v === "") continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function sanitizeModelForComment(model) {
+  const src = model && typeof model === "object" ? model : {};
+  return {
+    version: Number.isFinite(src.version) ? Number(src.version) : 1,
+    packId: String(src.packId || ""),
+    themeId: String(src.themeId || ""),
+    diagramType: String(src.diagramType || "flowchart"),
+    direction: String(src.direction || "LR"),
+    nodes: Array.isArray(src.nodes)
+      ? src.nodes.map((n) =>
+          pickDefined({
+            id: String(n?.id || ""),
+            label: String(n?.label || ""),
+            role: String(n?.role || ""),
+            boundaryId: n?.boundaryId || n?.groupId || null,
+            shape: n?.shape ? String(n.shape) : undefined,
+            className: n?.className ? String(n.className) : undefined,
+            style: n?.style && typeof n.style === "object" ? { ...n.style } : undefined
+          })
+        )
+      : [],
+    edges: Array.isArray(src.edges)
+      ? src.edges.map((e) =>
+          pickDefined({
+            id: String(e?.id || ""),
+            from: String(e?.from || ""),
+            to: String(e?.to || ""),
+            kind: String(e?.kind || ""),
+            label: e?.label ? String(e.label) : undefined,
+            style: e?.style && typeof e.style === "object" ? { ...e.style } : undefined
+          })
+        )
+      : [],
+    boundaries: Array.isArray(src.boundaries)
+      ? src.boundaries.map((b) =>
+          pickDefined({
+            id: String(b?.id || ""),
+            label: String(b?.label || ""),
+            role: String(b?.role || "")
+          })
+        )
+      : [],
+    rawBlocks: Array.isArray(src.rawBlocks)
+      ? src.rawBlocks.map((r) => ({
+          start: Number.isFinite(r?.start) ? Number(r.start) : null,
+          end: Number.isFinite(r?.end) ? Number(r.end) : null,
+          lines: Array.isArray(r?.lines) ? r.lines.map((line) => String(line ?? "")) : [],
+          fromRaw: !!r?.fromRaw
+        }))
+      : []
+  };
+}
+
 export function embedModelComment(model) {
   try {
-    const json = encodeJson(model, false);
+    const compact = sanitizeModelForComment(model);
+    const json = encodeJson(compact, false);
     const b64 = toBase64(utf8ToBytes(json));
     return `%%AE:MODEL ${b64}`;
   } catch {

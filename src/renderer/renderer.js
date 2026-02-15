@@ -1939,7 +1939,7 @@ function validateMermaidText(text) {
   return items;
 }
 
-function renderFromModel({ preserveWarnings = false } = {}) {
+function renderFromModel({ preserveWarnings = false, updateSource = true } = {}) {
   const rev = bumpSyncRev();
   state.model = normalizeModelClassNames(state.model);
   state.model = normalizeModel(clone(state.model));
@@ -1957,21 +1957,25 @@ function renderFromModel({ preserveWarnings = false } = {}) {
     setProblems(validation, { status: "error", open: true });
     return;
   }
-  const fullText = `${mermaidText}\n${buildInternalBlocksText(state.model.rawBlocks || [])}\n`;
-  const displayText = state.showInternalBlocks ? fullText : stripInternalBlocks(fullText);
-  updateEditorText(displayText);
+  if (updateSource) {
+    const fullText = `${mermaidText}\n${buildInternalBlocksText(state.model.rawBlocks || [])}\n`;
+    const displayText = state.showInternalBlocks ? fullText : stripInternalBlocks(fullText);
+    updateEditorText(displayText);
+  }
   updateInternalToggleVisibility();
   renderLists();
   renderPropPanel();
   renderMermaid(mermaidText, { expectedRev: rev });
-  state.textDirty = false;
-  setOutOfSync(false);
+  if (updateSource) {
+    state.textDirty = false;
+    setOutOfSync(false);
+  }
   if (!preserveWarnings) state.parseWarnings = [];
   if (!preserveWarnings) {
     state.problems = [];
     renderProblems();
   }
-  updateApplyButton();
+  if (updateSource) updateApplyButton();
 }
 
 async function renderFromText({ live = false } = {}) {
@@ -3298,8 +3302,8 @@ function wireToolbar() {
   });
 
   els.btnRelayout.addEventListener("click", () => {
-    // Re-layout should keep source text intact.
-    void renderFromText({ live: true });
+    // Re-layout: preview only (do not rewrite source text).
+    renderFromModel({ updateSource: false });
     markModelDirty("re-layout requested");
   });
 
@@ -3461,7 +3465,7 @@ function wireToolbar() {
     applyThemeVars(theme);
     initMermaidBase(theme).catch(showError);
     if (state.model) state.model.themeId = themeId;
-    void renderFromText({ live: true });
+    renderFromModel({ updateSource: false, preserveWarnings: true });
   });
 
   els.selDir.addEventListener("change", () => {
