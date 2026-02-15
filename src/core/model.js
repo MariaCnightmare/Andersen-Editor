@@ -47,11 +47,19 @@ function normalizeNode(node, index, boundaryMap) {
       y: toFiniteNumber(node.position.y, 0)
     };
   }
+  let hasPinnedOffset = false;
   if (node?.pinnedOffset && typeof node.pinnedOffset === "object") {
+    hasPinnedOffset = true;
     out.pinnedOffset = {
       x: toFiniteNumber(node.pinnedOffset.x, 0),
       y: toFiniteNumber(node.pinnedOffset.y, 0)
     };
+  }
+  if (node?.pinned != null) {
+    out.pinned = !!node.pinned;
+  } else if (hasPinnedOffset) {
+    // Backward compatibility: preserve pinned behavior when only pinnedOffset exists.
+    out.pinned = true;
   }
   return out;
 }
