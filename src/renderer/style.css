@@ -817,6 +817,7 @@ body.connect-mode #previewWrap {
 .preview svg {
   max-width: none;
   height: auto;
+  overflow: visible;
   shape-rendering: geometricPrecision;
   text-rendering: geometricPrecision;
 }
