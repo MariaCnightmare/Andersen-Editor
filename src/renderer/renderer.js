@@ -779,6 +779,15 @@ function buildTemplateMermaid(kind) {
   return buildSampleMermaid();
 }
 
+function isModelEmpty(model) {
+  return !model || (
+    (!Array.isArray(model.nodes) || model.nodes.length === 0) &&
+    (!Array.isArray(model.edges) || model.edges.length === 0) &&
+    (!Array.isArray(model.boundaries) || model.boundaries.length === 0) &&
+    (!Array.isArray(model.rawBlocks) || model.rawBlocks.length === 0)
+  );
+}
+
 function getFallbackPack() {
   return {
     packId: "fallback-pack",
@@ -4357,8 +4366,14 @@ async function boot() {
     localStorage.setItem(firstRunKey, "1");
   } else {
     try {
-      renderFromModel();
-      pushHistory();
+      if (isModelEmpty(state.model)) {
+        const sample = buildSampleMermaid();
+        updateEditorText(sample);
+        await renderFromText({ live: false });
+      } else {
+        renderFromModel();
+        pushHistory();
+      }
     } catch (err) {
       console.error("[boot] renderFromModel failed. Falling back to sample:", err);
       showWarning("Startup model restore failed. Loaded sample instead.");
