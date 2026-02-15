@@ -81,25 +81,9 @@ function groupBy(arr, keyFn) {
   return map;
 }
 
-function byStableId(a, b) {
-  const ai = String(a?.id || "");
-  const bi = String(b?.id || "");
-  return ai.localeCompare(bi);
-}
-
 export function generateMermaid(model, pack, theme) {
   const m = normalizeModel(clone(model));
   m.nodes.forEach((n) => normalizeNodeClassName(n));
-  const sortedBoundaries = [...(m.boundaries || [])].sort(byStableId);
-  const sortedNodes = [...(m.nodes || [])].sort(byStableId);
-  const sortedEdges = [...(m.edges || [])].sort((a, b) => {
-    const ai = String(a?.id || "");
-    const bi = String(b?.id || "");
-    if (ai && bi && ai !== bi) return ai.localeCompare(bi);
-    const af = `${a?.from || ""}|${a?.to || ""}|${a?.kind || ""}|${a?.label || ""}`;
-    const bf = `${b?.from || ""}|${b?.to || ""}|${b?.kind || ""}|${b?.label || ""}`;
-    return af.localeCompare(bf);
-  });
 
   const initLine = `%%{init: ${JSON.stringify(theme.init)} }%%`;
   const modelLine = embedModelComment(m);
@@ -110,11 +94,12 @@ export function generateMermaid(model, pack, theme) {
   lines.push(`flowchart ${m.direction}`);
 
   // boundaries
-  const nodesByBoundary = groupBy(sortedNodes, (n) => n.boundaryId || "__NONE__");
+  const nodesByBoundary = groupBy(m.nodes, (n) => n.boundaryId || "__NONE__");
+  const boundariesById = new Map(m.boundaries.map((b) => [b.id, b]));
 
   // output subgraphs
-  for (const b of sortedBoundaries) {
-    const bNodes = [...(nodesByBoundary.get(b.id) || [])].sort(byStableId);
+  for (const b of m.boundaries) {
+    const bNodes = nodesByBoundary.get(b.id) || [];
     lines.push(`  subgraph ${b.id}[${sanitizeLabel(b.label)}]`);
     for (const n of bNodes) {
       const role = pack.roles[n.role];
@@ -126,7 +111,7 @@ export function generateMermaid(model, pack, theme) {
   }
 
   // nodes without boundary
-  const noneNodes = [...(nodesByBoundary.get("__NONE__") || [])].sort(byStableId);
+  const noneNodes = nodesByBoundary.get("__NONE__") || [];
   for (const n of noneNodes) {
     const role = pack.roles[n.role];
     const shape = n.shape || (role ? role.shape : "rect");
@@ -143,7 +128,7 @@ export function generateMermaid(model, pack, theme) {
       if (cls) edgeStylesByClass.set(cls, style);
     }
   }
-  sortedEdges.forEach((e, idx) => {
+  m.edges.forEach((e, idx) => {
     const ek = pack.edgeKinds[e.kind];
     const arrow = ek ? ek.arrow : "-->";
     const label = sanitizeEdgeLabel(e.label || "");
@@ -166,25 +151,22 @@ export function generateMermaid(model, pack, theme) {
       edgeStyleLines.push(`  linkStyle ${idx} ${styleParts.join(",")}`);
     }
   });
-  if (sortedEdges.length) lines.push("");
+  if (m.edges.length) lines.push("");
 
   // classDefs
   if (theme.classDefs) {
-    const orderedClassDefs = Object.fromEntries(
-      Object.entries(theme.classDefs).sort(([a], [b]) => String(a).localeCompare(String(b)))
-    );
-    lines.push(...emitClassDefLines(orderedClassDefs));
+    lines.push(...emitClassDefLines(theme.classDefs));
     lines.push("");
   }
 
   // class assignments (nodes)
-  const nodeClassLines = buildNodeClassAssignments(sortedNodes, pack.roles);
+  const nodeClassLines = buildNodeClassAssignments(m.nodes, pack.roles);
   lines.push(...nodeClassLines);
   if (nodeClassLines.length) lines.push("");
 
   // boundary styles
   if (theme.boundaryStyles) {
-    for (const b of sortedBoundaries) {
+    for (const b of m.boundaries) {
       const br = pack.boundaryRoles[b.role];
       const cls = normalizeClassName(br ? br.className : null);
       if (!cls) continue;
@@ -195,12 +177,12 @@ export function generateMermaid(model, pack, theme) {
         lines.push(`  style ${b.id} ${style}`);
       }
     }
-    if (sortedBoundaries.length) lines.push("");
+    if (m.boundaries.length) lines.push("");
   }
 
   // per-node style overrides
   let nodeStyleCount = 0;
-  for (const n of sortedNodes) {
+  for (const n of m.nodes) {
     const fill = normalizeColorToken(n?.style?.fill);
     const stroke = normalizeColorToken(n?.style?.stroke);
     const color = normalizeColorToken(n?.style?.color);

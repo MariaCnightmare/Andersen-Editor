@@ -764,6 +764,12 @@ body.connect-mode #previewWrap {
   cursor: crosshair;
 }
 
+body.connect-mode #previewWrap,
+body.connect-mode #previewWrap * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 #previewWrap .previewZoom,
 #previewWrap .previewZoom * {
   cursor: default;
@@ -844,16 +850,6 @@ body.connect-mode #previewWrap {
   stroke-dasharray: none;
   opacity: 0.9;
   pointer-events: none;
-}
-.preview svg .ae-temp-edge-label {
-  fill: var(--text);
-  font-size: 11px;
-  text-anchor: middle;
-  dominant-baseline: middle;
-  pointer-events: none;
-}
-.preview svg .ae-drag-hide {
-  opacity: 0;
 }
 
 .preview svg g.edgePath path,
