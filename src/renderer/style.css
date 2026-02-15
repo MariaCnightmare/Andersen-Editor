@@ -847,7 +847,8 @@ body.connect-mode #previewWrap * {
 .preview svg .ae-temp-edge {
   stroke: #4fd4ff;
   stroke-width: 2px;
-  stroke-dasharray: 4 4;
+  stroke-dasharray: none;
+  opacity: 0.9;
   pointer-events: none;
 }
 

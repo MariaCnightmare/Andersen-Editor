@@ -3044,6 +3044,7 @@ function attachNodeInteractions(svg) {
 
   let dragNode = null;
   const DRAG_THRESHOLD_PX = 2;
+  let dragOverlayLines = [];
   const getNodeCenter = (nodeId) => {
     const nodeGroup = Array.from(svg.querySelectorAll("g.node")).find((x) => getNodeIdFromGroup(x) === nodeId);
     if (!nodeGroup) return null;
@@ -3053,65 +3054,29 @@ function attachNodeInteractions(svg) {
     return clientToSvg(svg, centerClientX, centerClientY);
   };
 
-  const clearDragOverlay = () => {};
+  const clearDragOverlay = () => {
+    for (const line of dragOverlayLines) line.remove();
+    dragOverlayLines = [];
+  };
 
-  const syncEdgeGeometryById = (edgeId) => {
-    const edge = state.model.edges.find((e) => e.id === edgeId);
-    if (!edge) return;
-    const edgeGroup = edgePathMap.get(edgeId);
-    if (!edgeGroup) return;
-    const paths =
-      edgeGroup.tagName?.toLowerCase() === "path"
-        ? [edgeGroup]
-        : Array.from(edgeGroup.querySelectorAll("path"));
-    if (!paths.length) return;
-    const from = getNodeCenter(edge.from);
-    const to = getNodeCenter(edge.to);
-    if (!from || !to) return;
-    const toLocal = (el, pt) => {
-      try {
-        const ctm = el.getCTM();
-        if (!ctm) return pt;
-        const inv = ctm.inverse();
-        const sp = svg.createSVGPoint();
-        sp.x = pt.x;
-        sp.y = pt.y;
-        const lp = sp.matrixTransform(inv);
-        return { x: lp.x, y: lp.y };
-      } catch {
-        return pt;
-      }
-    };
-    paths.forEach((p) => {
-      const lf = toLocal(p, from);
-      const lt = toLocal(p, to);
-      const d = `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`;
-      p.setAttribute("d", d);
-    });
-    const labelG = edgeLabelMap.get(edgeId);
-    if (labelG) {
-      const mx = (from.x + to.x) / 2;
-      const my = (from.y + to.y) / 2;
-      if (!labelG.dataset.aeOrigTransform) {
-        labelG.dataset.aeOrigTransform = labelG.getAttribute("transform") || "";
-      }
-      const localMid = toLocal(labelG, { x: mx, y: my });
-      labelG.setAttribute("transform", `translate(${localMid.x},${localMid.y})`);
+  const updateDragOverlay = () => {
+    if (!dragNode?.active) return;
+    clearDragOverlay();
+    const connected = state.model.edges.filter((e) => e.from === dragNode.id || e.to === dragNode.id);
+    for (const edge of connected) {
+      const from = getNodeCenter(edge.from);
+      const to = getNodeCenter(edge.to);
+      if (!from || !to) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "ae-temp-edge");
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y));
+      svg.appendChild(line);
+      dragOverlayLines.push(line);
     }
   };
-
-  const syncConnectedEdges = (nodeId) => {
-    for (const e of state.model.edges) {
-      if (e.from === nodeId || e.to === nodeId) syncEdgeGeometryById(e.id);
-    }
-  };
-
-  const syncAllEdges = () => {
-    for (const e of state.model.edges) syncEdgeGeometryById(e.id);
-  };
-  syncAllEdges();
-
-  const updateDragOverlay = () => {};
 
   svg.addEventListener("pointerdown", (evt) => {
     if (evt.button !== 0) return;
@@ -3206,7 +3171,6 @@ function attachNodeInteractions(svg) {
     const next = { x: targetX - dragNode.baseX, y: targetY - dragNode.baseY };
     setPinnedOffset(dragNode.node, next);
     setNodeTransform(dragNode.g, targetX, targetY);
-    syncConnectedEdges(dragNode.id);
     updateDragOverlay();
   });
 
@@ -3226,7 +3190,6 @@ function attachNodeInteractions(svg) {
       devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
       selectNodeById(id);
       pushHistory();
-      syncConnectedEdges(id);
       clearDragOverlay();
       renderFromModel({ updateSource: false, preserveWarnings: true });
       markModelDirty("node position changed");
