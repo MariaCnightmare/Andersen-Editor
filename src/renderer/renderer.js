@@ -3115,7 +3115,8 @@ function attachNodeInteractions(svg) {
     lp.x = mid.x;
     lp.y = mid.y;
     const global = lp.matrixTransform(ctm);
-    const localMid = toLocalPoint(labelG, { x: global.x, y: global.y });
+    const baseSpace = labelG.parentNode?.getCTM ? labelG.parentNode : labelG;
+    const localMid = toLocalPoint(baseSpace, { x: global.x, y: global.y });
     labelG.setAttribute("transform", `translate(${localMid.x},${localMid.y})`);
   };
 
