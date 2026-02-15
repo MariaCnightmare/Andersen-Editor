@@ -1404,6 +1404,20 @@ function getEditorBaseText() {
   return state.editor.getValue();
 }
 
+function toEditorDisplayText(text) {
+  const stripped = stripInternalBlocks(String(text ?? ""));
+  const lines = stripped.split(/\r?\n/).filter((line) => !/^\s*%%AE:MODEL\b/.test(line));
+  const normalized = lines.join("\n").replace(/\n{3,}/g, "\n\n");
+  const meaningful = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^%%\{.*\}%%$/.test(line));
+  if (meaningful.length === 1 && /^(flowchart|graph)\b/i.test(meaningful[0])) {
+    return "";
+  }
+  return /\r?\n$/.test(stripped) ? `${normalized}\n` : normalized;
+}
+
 function getFullSourceForOutput() {
   const base = stripInternalBlocks(getEditorBaseText());
   const normalized = [];
@@ -1660,6 +1674,7 @@ function debounce(fn, ms) {
 }
 
 function updateEditorText(text) {
+  const displayText = toEditorDisplayText(text);
   let cmCursor = null;
   let cmScroll = null;
   let taSel = null;
@@ -1672,8 +1687,8 @@ function updateEditorText(text) {
     taScroll = [els.srcTextarea.scrollTop || 0, els.srcTextarea.scrollLeft || 0];
   }
   state.syncingEditor = true;
-  state.lastProgrammaticEditorText = text ?? "";
-  state.editor.setValue(text);
+  state.lastProgrammaticEditorText = displayText ?? "";
+  state.editor.setValue(displayText);
   state.syncingEditor = false;
   if (state.editor?.cm && cmCursor && cmScroll) {
     state.editor.cm.setCursor(cmCursor);
@@ -3532,7 +3547,7 @@ function attachNodeInteractions(svg) {
       pushHistory();
       restoreLiveMutations();
       clearDragOverlay();
-      renderFromModel({ updateSource: false, preserveWarnings: true });
+      renderFromModel({ updateSource: true, preserveWarnings: true });
       markModelDirty("node position changed");
       return;
     }

@@ -153,14 +153,33 @@ export function generateMermaid(model, pack, theme) {
   });
   if (m.edges.length) lines.push("");
 
-  // classDefs
-  if (theme.classDefs) {
-    lines.push(...emitClassDefLines(theme.classDefs));
-    lines.push("");
-  }
-
   // class assignments (nodes)
   const nodeClassLines = buildNodeClassAssignments(m.nodes, pack.roles);
+  const usedClasses = new Set();
+  for (const n of m.nodes) {
+    const roleClass = pack.roles?.[n.role]?.className || "";
+    const cls = normalizeClassName(n?.className || roleClass || "");
+    if (cls) usedClasses.add(cls);
+  }
+  for (const b of m.boundaries || []) {
+    const boundaryClass = normalizeClassName(pack.boundaryRoles?.[b.role]?.className || "");
+    if (boundaryClass) usedClasses.add(boundaryClass);
+  }
+
+  // classDefs (emit only classes that are actually used by current model)
+  if (theme.classDefs && usedClasses.size) {
+    const filtered = {};
+    for (const [name, style] of Object.entries(theme.classDefs)) {
+      const cls = normalizeClassName(name);
+      if (cls && usedClasses.has(cls)) filtered[name] = style;
+    }
+    const classDefLines = emitClassDefLines(filtered);
+    if (classDefLines.length) {
+      lines.push(...classDefLines);
+      lines.push("");
+    }
+  }
+
   lines.push(...nodeClassLines);
   if (nodeClassLines.length) lines.push("");
 
