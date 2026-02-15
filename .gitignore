@@ -7,3 +7,10 @@ node_modules/
 
 # python venv
 .venv/
+
+# generated vendor (synced from node_modules by tools)
+src/renderer/public/vendor/
+
+# temp / work dirs
+_nested_repo_Andersen-Editor_*/
+
