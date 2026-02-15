@@ -3045,6 +3045,8 @@ function attachNodeInteractions(svg) {
   let dragNode = null;
   const DRAG_THRESHOLD_PX = 2;
   let dragOverlayLines = [];
+  const liveMutatedPaths = new Map();
+  const liveMutatedLabels = new Map();
   const getNodeCenter = (nodeId) => {
     const nodeGroup = Array.from(svg.querySelectorAll("g.node")).find((x) => getNodeIdFromGroup(x) === nodeId);
     if (!nodeGroup) return null;
@@ -3057,6 +3059,61 @@ function attachNodeInteractions(svg) {
   const clearDragOverlay = () => {
     for (const line of dragOverlayLines) line.remove();
     dragOverlayLines = [];
+  };
+
+  const toLocalPoint = (el, pt) => {
+    try {
+      const ctm = el.getCTM();
+      if (!ctm) return pt;
+      const inv = ctm.inverse();
+      const sp = svg.createSVGPoint();
+      sp.x = pt.x;
+      sp.y = pt.y;
+      const lp = sp.matrixTransform(inv);
+      return { x: lp.x, y: lp.y };
+    } catch {
+      return pt;
+    }
+  };
+
+  const updateConnectedEdgesLive = (nodeId) => {
+    const connected = state.model.edges.filter((e) => e.from === nodeId || e.to === nodeId);
+    for (const edge of connected) {
+      const host = edgePathMap.get(edge.id);
+      if (!host) continue;
+      const from = getNodeCenter(edge.from);
+      const to = getNodeCenter(edge.to);
+      if (!from || !to) continue;
+      const paths =
+        host.tagName?.toLowerCase() === "path" ? [host] : Array.from(host.querySelectorAll("path"));
+      for (const p of paths) {
+        if (!liveMutatedPaths.has(p)) liveMutatedPaths.set(p, p.getAttribute("d") || "");
+        const lf = toLocalPoint(p, from);
+        const lt = toLocalPoint(p, to);
+        p.setAttribute("d", `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`);
+      }
+      const labelG = edgeLabelMap.get(edge.id);
+      if (labelG) {
+        if (!liveMutatedLabels.has(labelG)) {
+          liveMutatedLabels.set(labelG, labelG.getAttribute("transform") || "");
+        }
+        const mx = (from.x + to.x) / 2;
+        const my = (from.y + to.y) / 2;
+        const localMid = toLocalPoint(labelG, { x: mx, y: my });
+        labelG.setAttribute("transform", `translate(${localMid.x},${localMid.y})`);
+      }
+    }
+  };
+
+  const restoreLiveMutations = () => {
+    for (const [p, d] of liveMutatedPaths.entries()) {
+      if (p?.isConnected) p.setAttribute("d", d);
+    }
+    for (const [g, t] of liveMutatedLabels.entries()) {
+      if (g?.isConnected) g.setAttribute("transform", t);
+    }
+    liveMutatedPaths.clear();
+    liveMutatedLabels.clear();
   };
 
   const updateDragOverlay = () => {
@@ -3171,6 +3228,7 @@ function attachNodeInteractions(svg) {
     const next = { x: targetX - dragNode.baseX, y: targetY - dragNode.baseY };
     setPinnedOffset(dragNode.node, next);
     setNodeTransform(dragNode.g, targetX, targetY);
+    updateConnectedEdgesLive(dragNode.id);
     updateDragOverlay();
   });
 
@@ -3196,6 +3254,7 @@ function attachNodeInteractions(svg) {
       return;
     }
     clearDragOverlay();
+    restoreLiveMutations();
     dragNode.g.releasePointerCapture(evt.pointerId);
     dragNode = null;
   });
@@ -3203,6 +3262,7 @@ function attachNodeInteractions(svg) {
   svg.addEventListener("pointercancel", (evt) => {
     if (!dragNode || evt.pointerId !== dragNode.pointerId) return;
     clearDragOverlay();
+    restoreLiveMutations();
     try {
       dragNode.g.releasePointerCapture(evt.pointerId);
     } catch {}
