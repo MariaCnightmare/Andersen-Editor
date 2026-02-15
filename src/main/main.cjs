@@ -189,7 +189,12 @@ function createWindow() {
   if (simpleUi) {
     mainWindow.loadFile(path.join(__dirname, "..", "renderer", "simple.html"));
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+    const distIndex = path.resolve(__dirname, "..", "..", "dist", "index.html");
+    if (fs.existsSync(distIndex)) {
+      mainWindow.loadFile(distIndex);
+    } else {
+      mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+    }
   }
 
   if (process.platform !== "darwin") {

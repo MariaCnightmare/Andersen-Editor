@@ -1,4 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
+const path = require("path");
+const fs = require("fs");
 
 function onMenuAction(callback) {
   if (typeof callback !== "function") return;
@@ -50,11 +52,10 @@ contextBridge.exposeInMainWorld("api", {
 });
 
 try {
-  try {
-    require("../preload/menuBridge.cjs");
-  } catch (e) {
-    require("../preload/menuBridge.js");
-  }
+  const bridgeCjs = path.resolve(__dirname, "..", "preload", "menuBridge.cjs");
+  const bridgeJs = path.resolve(__dirname, "..", "preload", "menuBridge.js");
+  if (fs.existsSync(bridgeCjs)) require(bridgeCjs);
+  else if (fs.existsSync(bridgeJs)) require(bridgeJs);
 } catch (err) {
   // Keep core preload API available even if menu bridge fails to initialize.
   console.error("[preload] menuBridge init failed:", err?.message || err);
