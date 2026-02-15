@@ -2928,7 +2928,7 @@ function attachNodeInteractions(svg) {
 
   edgePaths.forEach((g, idx) => {
     const sig = parseEdgeSignature(g, idx);
-    let edge = null;
+    let edge = state.model.edges[idx] || null;
     if (sig.from && sig.to) {
       const key = `${sig.from}|${sig.to}|${sig.label || ""}`;
       const exact = candidatesByKey.get(key) || [];
@@ -2940,10 +2940,16 @@ function attachNodeInteractions(svg) {
     }
     if (edge) {
       g.dataset.aeEdgeId = edge.id;
+      g.querySelectorAll("*").forEach((el) => {
+        el.dataset.aeEdgeId = edge.id;
+      });
       edgePathMap.set(edge.id, g);
       const labelG = edgeLabels[idx];
       if (labelG) {
         labelG.dataset.aeEdgeId = edge.id;
+        labelG.querySelectorAll("*").forEach((el) => {
+          el.dataset.aeEdgeId = edge.id;
+        });
         edgeLabelMap.set(edge.id, labelG);
       }
     } else {
@@ -2981,10 +2987,18 @@ function attachNodeInteractions(svg) {
     });
   });
 
+  const resolveEdgeIdFromEvent = (evt) => {
+    const path = typeof evt.composedPath === "function" ? evt.composedPath() : [];
+    for (const node of path) {
+      if (!node || node === svg || !node.dataset) continue;
+      if (node.dataset.aeEdgeId) return node.dataset.aeEdgeId;
+    }
+    const host = evt.target?.closest?.("g.edgePath, g.edgeLabel");
+    return host?.dataset?.aeEdgeId || null;
+  };
+
   svg.addEventListener("dblclick", (evt) => {
-    const host = evt.target.closest("g.edgePath, g.edgeLabel");
-    if (!host) return;
-    const edgeId = host.dataset.aeEdgeId;
+    const edgeId = resolveEdgeIdFromEvent(evt);
     if (!edgeId) return;
     evt.preventDefault();
     evt.stopPropagation();
@@ -2998,9 +3012,10 @@ function attachNodeInteractions(svg) {
   const getNodeCenter = (nodeId) => {
     const nodeGroup = Array.from(svg.querySelectorAll("g.node")).find((x) => getNodeIdFromGroup(x) === nodeId);
     if (!nodeGroup) return null;
-    const box = nodeGroup.getBBox();
-    const t = parseTranslate(nodeGroup.getAttribute("transform"));
-    return { x: t.x + box.width / 2, y: t.y + box.height / 2 };
+    const rect = nodeGroup.getBoundingClientRect();
+    const centerClientX = rect.left + rect.width / 2;
+    const centerClientY = rect.top + rect.height / 2;
+    return clientToSvg(svg, centerClientX, centerClientY);
   };
 
   const clearDragOverlay = () => {
@@ -3023,7 +3038,10 @@ function attachNodeInteractions(svg) {
     if (labelG) {
       const mx = (from.x + to.x) / 2;
       const my = (from.y + to.y) / 2;
-      labelG.setAttribute("transform", `translate(${mx}, ${my})`);
+      if (!labelG.dataset.aeOrigTransform) {
+        labelG.dataset.aeOrigTransform = labelG.getAttribute("transform") || "";
+      }
+      labelG.setAttribute("transform", `translate(${mx},${my})`);
     }
   };
 
