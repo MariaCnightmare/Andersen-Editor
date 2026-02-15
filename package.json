@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
+    "start:electron": "npx electron src/main/main.js",
+    "dev:electron": "npx electron src/main/main.js",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 5173",
     "prebuild": "./tools/sync_vendor_assets.sh"

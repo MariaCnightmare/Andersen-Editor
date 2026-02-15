@@ -64,7 +64,8 @@ const state = {
   menuHandlers: {},
   exportRecentPaths: [],
   statusDetailsOpen: false,
-  lastAutoScaleKey: ""
+  lastAutoScaleKey: "",
+  appliedThemeVarKeys: []
 };
 
 const els = {
@@ -812,6 +813,27 @@ function getFallbackTheme() {
       "boundary-default": "fill:#eef2f7,stroke:#6b7280"
     }
   };
+}
+
+function clearThemeVars() {
+  if (!Array.isArray(state.appliedThemeVarKeys) || !state.appliedThemeVarKeys.length) return;
+  for (const key of state.appliedThemeVarKeys) {
+    document.documentElement.style.removeProperty(key);
+  }
+  state.appliedThemeVarKeys = [];
+}
+
+function applyThemeVars(theme) {
+  clearThemeVars();
+  const vars = theme && typeof theme === "object" ? theme.vars : null;
+  if (!vars || typeof vars !== "object") return;
+  const applied = [];
+  for (const [key, value] of Object.entries(vars)) {
+    if (!/^--[A-Za-z0-9_-]+$/.test(String(key))) continue;
+    document.documentElement.style.setProperty(key, String(value));
+    applied.push(key);
+  }
+  state.appliedThemeVarKeys = applied;
 }
 
 async function safeReadJson(relPath, fallbackValue, label) {
@@ -3426,6 +3448,7 @@ function wireToolbar() {
     const themeId = els.selTheme.value;
     const theme = state.themes.find((t) => t.themeId === themeId) || state.themes[0];
     state.theme = theme;
+    applyThemeVars(theme);
     initMermaidBase(theme).catch(showError);
     if (state.model) state.model.themeId = themeId;
     renderFromModel();
@@ -4222,12 +4245,14 @@ async function boot() {
     showWarning("Theme load failed. Using fallback theme.");
   }
   state.theme = state.themes.find((t) => t.themeId === "infra-dark") || state.themes[0] || getFallbackTheme();
+  applyThemeVars(state.theme);
   try {
     await initMermaidBase(state.theme);
   } catch (err) {
     console.error("[boot] mermaid init failed:", err);
     showWarning("Mermaid init failed. Retrying with fallback theme.");
     state.theme = getFallbackTheme();
+    applyThemeVars(state.theme);
     await initMermaidBase(state.theme);
   }
 

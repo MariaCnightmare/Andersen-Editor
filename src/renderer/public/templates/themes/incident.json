@@ -1,0 +1,67 @@
+{
+  "themeId": "incident",
+  "name": "Incident",
+  "mode": "dark",
+  "init": {
+    "theme": "dark",
+    "flowchart": {
+      "curve": "basis"
+    }
+  },
+  "vars": {
+    "--surface-0": "#13090a",
+    "--surface-1": "#1a0d10",
+    "--surface-2": "#231217",
+    "--panel": "#1a0d10",
+    "--panel2": "#231217",
+    "--text": "#fff1f3",
+    "--text-1": "#ffe5e9",
+    "--text-2": "#ffc9d0",
+    "--text-3": "#ff9aaa",
+    "--muted": "#ff9aaa",
+    "--border": "rgba(255,107,107,.30)",
+    "--border-1": "rgba(255,107,107,.30)",
+    "--border-2": "rgba(255,107,107,.46)",
+    "--border-3": "rgba(255,107,107,.72)",
+    "--accent": "#ff6b6b",
+    "--accent-1": "#ff6b6b",
+    "--accent2": "#ffd36b",
+    "--btn": "#2a1317",
+    "--btnHover": "#3a1b22",
+    "--input": "#1f1014",
+    "--danger": "#ff6b6b",
+    "--ok": "#ffd36b",
+    "--shadow-1": "0 10px 24px rgba(0,0,0,.45)",
+    "--shadow-2": "0 16px 30px rgba(0,0,0,.40)",
+    "--t-fast": "120ms"
+  },
+  "classDefs": {
+    "role-client": "fill:#1f2a44,stroke:#7fb2ff,stroke-width:2px,color:#e6eefc",
+    "role-internet": "fill:#2a223a,stroke:#c9a7ff,stroke-width:2px,color:#e6eefc",
+    "role-server": "fill:#2a1b1b,stroke:#ff6b6b,stroke-width:3px,color:#e6eefc",
+    "role-app": "fill:#2a1b1b,stroke:#ff6b6b,stroke-width:3px,color:#e6eefc",
+    "role-lb": "fill:#2f2b1b,stroke:#ffd36b,stroke-width:2px,color:#e6eefc",
+    "role-db": "fill:#2a1b1b,stroke:#ff6b6b,stroke-width:3px,color:#e6eefc",
+    "role-vpn": "fill:#3a2b1b,stroke:#ffd36b,stroke-width:2px,color:#e6eefc",
+    "role-fw": "fill:#3a1b1b,stroke:#ff6b6b,stroke-width:3px,color:#e6eefc",
+    "role-router": "fill:#233a1b,stroke:#b6ff6b,stroke-width:2px,color:#e6eefc",
+    "role-external": "fill:#202020,stroke:#a7b4cf,stroke-width:2px,color:#e6eefc",
+    "accent-blue": "fill:#122338,stroke:#7fb2ff,stroke-width:2px,color:#e6eefc",
+    "accent-green": "fill:#132b22,stroke:#6bffb5,stroke-width:2px,color:#e6eefc",
+    "accent-amber": "fill:#2f2b1b,stroke:#ffd36b,stroke-width:2px,color:#e6eefc",
+    "accent-red": "fill:#2a1b1b,stroke:#ff6b6b,stroke-width:3px,color:#e6eefc"
+  },
+  "boundaryStyles": {
+    "boundary-onprem": "fill:transparent,stroke:#a7b4cf,stroke-width:1px,stroke-dasharray:4 4,color:#a7b4cf",
+    "boundary-vpc": "fill:transparent,stroke:#ff6b6b,stroke-width:2px,stroke-dasharray:6 4,color:#ff6b6b",
+    "boundary-subnet": "fill:transparent,stroke:#ff6b6b,stroke-width:2px,stroke-dasharray:6 4,color:#ff6b6b",
+    "boundary-dmz": "fill:transparent,stroke:#ffd36b,stroke-width:2px,stroke-dasharray:6 4,color:#ffd36b"
+  },
+  "edgeStyles": {
+    "edge-http": "stroke:#ff6b6b,stroke-width:3px",
+    "edge-sql": "stroke:#ff6b6b,stroke-width:3px",
+    "edge-dep": "stroke:#ffd36b,stroke-width:2px,stroke-dasharray:4 4",
+    "edge-opt": "stroke:#a7b4cf,stroke-width:1px,stroke-dasharray:2 6",
+    "edge-tunnel": "stroke:#ffd36b,stroke-width:5px,stroke-dasharray:6 4"
+  }
+}

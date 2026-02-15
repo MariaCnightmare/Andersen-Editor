@@ -1,8 +1,32 @@
 :root{
-  --bg:#0b0f14;
-  --fg:#e6edf3;
-  --muted:#8b949e;
-  --border:rgba(255,255,255,.12);
-  --accent:#2f81f7;
-  --radius:12px;
+  --surface-0: #060910;
+  --surface-1: #0a111a;
+  --surface-2: #0b141f;
+  --panel: #0a111a;
+  --panel2: #0b141f;
+
+  --text: #eef4ff;
+  --text-1: #f6f9ff;
+  --text-2: #dce7f9;
+  --text-3: #a0b2cc;
+  --muted: #a0b2cc;
+
+  --border: rgba(255,255,255,.08);
+  --border-1: rgba(255,255,255,.10);
+  --border-2: rgba(255,255,255,.18);
+  --border-3: rgba(79,212,255,.60);
+
+  --accent: #4fd4ff;
+  --accent-1: #4fd4ff;
+  --accent2: #ffc266;
+  --btn: #0f1b2a;
+  --btnHover: #18304a;
+  --input: #0b1522;
+  --danger: #ff6b6b;
+  --ok: #6bffb5;
+
+  --shadow-1: 0 10px 24px rgba(0,0,0,.40);
+  --shadow-2: 0 16px 30px rgba(0,0,0,.35);
+  --t-fast: 140ms;
+  --radius: 12px;
 }
