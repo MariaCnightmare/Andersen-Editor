@@ -50,7 +50,7 @@ contextBridge.exposeInMainWorld("api", {
 });
 
 try {
-  require("../preload/menuBridge.js");
+  require("../preload/menuBridge.cjs");
 } catch (err) {
   // Keep core preload API available even if menu bridge fails to initialize.
   console.error("[preload] menuBridge init failed:", err?.message || err);

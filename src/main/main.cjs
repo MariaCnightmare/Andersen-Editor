@@ -434,10 +434,14 @@ ipcMain.handle("config:setOzone", async (_evt, value) => {
 // --- Asset read (templates/docs) ---
 ipcMain.handle("asset:readText", async (_evt, relPath) => {
   const requested = String(relPath || "").replace(/^\/+/, "");
+  const projectRoot = path.resolve(__dirname, "..", "..");
   const roots = [
     app.getAppPath(),
+    projectRoot,
     path.resolve(app.getAppPath(), "dist"),
-    path.resolve(app.getAppPath(), "src", "renderer", "public")
+    path.resolve(app.getAppPath(), "src", "renderer", "public"),
+    path.resolve(projectRoot, "dist"),
+    path.resolve(projectRoot, "src", "renderer", "public")
   ];
 
   for (const root of roots) {
@@ -453,7 +457,11 @@ ipcMain.handle("asset:readText", async (_evt, relPath) => {
     return { ok: true, content };
   }
 
-  return { ok: false, error: `Not found: ${requested}` };
+  return {
+    ok: false,
+    error: `Not found: ${requested}`,
+    tried: roots.map((root) => path.resolve(root, requested))
+  };
 });
 
 // --- Open/Save Mermaid (.mmd) ---
