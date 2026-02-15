@@ -3089,6 +3089,52 @@ function attachNodeInteractions(svg) {
     }
   };
 
+  const readPathEndpoints = (pathEl) => {
+    const d = pathEl.getAttribute("d") || "";
+    const nums = d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)?.map((n) => Number(n)) || [];
+    if (nums.length < 4) return null;
+    return {
+      start: { x: nums[0], y: nums[1] },
+      end: { x: nums[nums.length - 2], y: nums[nums.length - 1] }
+    };
+  };
+
+  const computeSimilarity = (s0, e0, s1, e1) => {
+    const v0x = e0.x - s0.x;
+    const v0y = e0.y - s0.y;
+    const v1x = e1.x - s1.x;
+    const v1y = e1.y - s1.y;
+    const n0 = Math.hypot(v0x, v0y) || 1;
+    const n1 = Math.hypot(v1x, v1y) || 1;
+    const scale = n1 / n0;
+    const a0 = Math.atan2(v0y, v0x);
+    const a1 = Math.atan2(v1y, v1x);
+    const th = a1 - a0;
+    const c = Math.cos(th) * scale;
+    const s = Math.sin(th) * scale;
+    const tx = s1.x - (c * s0.x - s * s0.y);
+    const ty = s1.y - (s * s0.x + c * s0.y);
+    return { a: c, b: s, c: -s, d: c, e: tx, f: ty };
+  };
+
+  const applyPathFollowTransform = (pathEl, fromGlobal, toGlobal) => {
+    if (!liveMutatedPaths.has(pathEl)) {
+      const base = readPathEndpoints(pathEl);
+      if (!base) return;
+      liveMutatedPaths.set(pathEl, {
+        baseStart: base.start,
+        baseEnd: base.end,
+        origTransform: pathEl.getAttribute("transform") || ""
+      });
+    }
+    const base = liveMutatedPaths.get(pathEl);
+    if (!base) return;
+    const s1 = toLocalPoint(pathEl, fromGlobal);
+    const e1 = toLocalPoint(pathEl, toGlobal);
+    const m = computeSimilarity(base.baseStart, base.baseEnd, s1, e1);
+    pathEl.setAttribute("transform", `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`);
+  };
+
   const updateConnectedEdgesLive = (nodeId) => {
     const connected = state.model.edges.filter((e) => e.from === nodeId || e.to === nodeId);
     for (const edge of connected) {
@@ -3100,10 +3146,7 @@ function attachNodeInteractions(svg) {
       const paths =
         host.tagName?.toLowerCase() === "path" ? [host] : Array.from(host.querySelectorAll("path"));
       for (const p of paths) {
-        if (!liveMutatedPaths.has(p)) liveMutatedPaths.set(p, p.getAttribute("d") || "");
-        const lf = toLocalPoint(p, from);
-        const lt = toLocalPoint(p, to);
-        p.setAttribute("d", `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`);
+        applyPathFollowTransform(p, from, to);
       }
       const labelG = edgeLabelMap.get(edge.id);
       if (labelG) {
@@ -3119,8 +3162,8 @@ function attachNodeInteractions(svg) {
   };
 
   const restoreLiveMutations = () => {
-    for (const [p, d] of liveMutatedPaths.entries()) {
-      if (p?.isConnected) p.setAttribute("d", d);
+    for (const [p, meta] of liveMutatedPaths.entries()) {
+      if (p?.isConnected) p.setAttribute("transform", meta?.origTransform || "");
     }
     for (const [g, t] of liveMutatedLabels.entries()) {
       if (g?.isConnected) g.setAttribute("transform", t);
@@ -3146,9 +3189,7 @@ function attachNodeInteractions(svg) {
       const paths =
         host.tagName?.toLowerCase() === "path" ? [host] : Array.from(host.querySelectorAll("path"));
       for (const p of paths) {
-        const lf = toLocalPoint(p, from);
-        const lt = toLocalPoint(p, to);
-        p.setAttribute("d", `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`);
+        applyPathFollowTransform(p, from, to);
       }
       const labelG = edgeLabelMap.get(edge.id);
       if (labelG) {
@@ -3293,6 +3334,7 @@ function attachNodeInteractions(svg) {
       devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
       selectNodeById(id);
       pushHistory();
+      restoreLiveMutations();
       clearDragOverlay();
       renderFromModel({ updateSource: false, preserveWarnings: true });
       markModelDirty("node position changed");
