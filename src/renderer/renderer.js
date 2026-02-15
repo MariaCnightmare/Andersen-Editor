@@ -20,6 +20,9 @@ try {
 }
 
 const $ = (id) => document.getElementById(id);
+const PRO_CAP_EXPORT_PDF = "export.pdf";
+const PRO_CAP_EXPORT_PNG_HIGHRES = "export.png.highres";
+const PRO_CAP_EXPORT_MODEL_JSON = "export.modelJson";
 
 const state = {
   pack: null,
@@ -66,7 +69,8 @@ const state = {
   exportRecentPaths: [],
   statusDetailsOpen: false,
   lastAutoScaleKey: "",
-  appliedThemeVarKeys: []
+  appliedThemeVarKeys: [],
+  entitlements: null
 };
 
 const els = {
@@ -165,6 +169,9 @@ const els = {
   btnTextPromptOk: $("btnTextPromptOk"),
   exportDialog: $("exportDialog"),
   exportFormat: $("exportFormat"),
+  exportPngQualityRow: $("exportPngQualityRow"),
+  exportPngQuality: $("exportPngQuality"),
+  exportPngQualityHint: $("exportPngQualityHint"),
   exportPathInput: $("exportPathInput"),
   exportRecentList: $("exportRecentList"),
   btnExportBrowse: $("btnExportBrowse"),
@@ -172,6 +179,13 @@ const els = {
   exportError: $("exportError"),
   btnExportCancel: $("btnExportCancel"),
   btnExportRun: $("btnExportRun"),
+  btnProUnlock: $("btnProUnlock"),
+  proDialog: $("proDialog"),
+  proStatusText: $("proStatusText"),
+  proStatusError: $("proStatusError"),
+  btnProPurchase: $("btnProPurchase"),
+  btnProRestore: $("btnProRestore"),
+  btnProClose: $("btnProClose"),
   newDialog: $("newDialog"),
   btnNewCancel: $("btnNewCancel"),
   btnAddNode: $("btnAddNode"),
@@ -915,6 +929,112 @@ function showToast(message) {
   }, 2000);
 }
 
+function hasCapability(capability) {
+  if (!capability) return true;
+  return !!state.entitlements?.capabilities?.[capability];
+}
+
+function requiredCapabilityForExport(format, { pngScale = 1 } = {}) {
+  const f = normalizeExportFormat(format);
+  if (f === "pdf") return PRO_CAP_EXPORT_PDF;
+  if (f === "modelJson") return PRO_CAP_EXPORT_MODEL_JSON;
+  if (f === "png" && Number(pngScale) > 1) return PRO_CAP_EXPORT_PNG_HIGHRES;
+  return null;
+}
+
+function setProDialogError(message) {
+  if (!els.proStatusError) return;
+  const msg = String(message || "");
+  if (!msg) {
+    els.proStatusError.textContent = "";
+    els.proStatusError.classList.add("hidden");
+    return;
+  }
+  els.proStatusError.textContent = msg;
+  els.proStatusError.classList.remove("hidden");
+}
+
+function updateProUi() {
+  const isPro = !!state.entitlements?.isPro;
+  const source = state.entitlements?.source || "free-default";
+  if (els.btnProUnlock) {
+    els.btnProUnlock.textContent = isPro ? "Pro" : "Free";
+    els.btnProUnlock.title = isPro ? `Pro unlocked (${source})` : "Free plan";
+  }
+  if (els.proStatusText) {
+    els.proStatusText.textContent = `Status: ${isPro ? "Pro" : "Free"} (${source})`;
+  }
+  const lockPdf = !hasCapability(PRO_CAP_EXPORT_PDF);
+  const lockModel = !hasCapability(PRO_CAP_EXPORT_MODEL_JSON);
+  if (els.btnExportPdf) {
+    els.btnExportPdf.classList.toggle("locked", lockPdf);
+  }
+  if (els.btnExportModelJson) {
+    els.btnExportModelJson.classList.toggle("locked", lockModel);
+  }
+  if (els.exportPngQualityHint) {
+    const showLock = !!els.exportPngQuality && els.exportPngQuality.value === "highres" && !hasCapability(PRO_CAP_EXPORT_PNG_HIGHRES);
+    els.exportPngQualityHint.classList.toggle("hidden", !showLock);
+  }
+}
+
+async function refreshEntitlements(reason = "manual") {
+  if (!window.api?.entitlementsGetStatus) {
+    state.entitlements = {
+      isPro: false,
+      source: "unsupported",
+      capabilities: {
+        [PRO_CAP_EXPORT_PDF]: false,
+        [PRO_CAP_EXPORT_PNG_HIGHRES]: false,
+        [PRO_CAP_EXPORT_MODEL_JSON]: false
+      }
+    };
+    updateProUi();
+    return state.entitlements;
+  }
+  const res = await window.api.entitlementsGetStatus();
+  if (res?.ok && res.status) {
+    state.entitlements = res.status;
+  } else {
+    state.entitlements = {
+      isPro: false,
+      source: "error",
+      capabilities: {
+        [PRO_CAP_EXPORT_PDF]: false,
+        [PRO_CAP_EXPORT_PNG_HIGHRES]: false,
+        [PRO_CAP_EXPORT_MODEL_JSON]: false
+      },
+      lastError: res?.error || "failed to load entitlements"
+    };
+    console.warn("[entitlements] refresh failed", { reason, error: res?.error || "unknown" });
+  }
+  updateProUi();
+  return state.entitlements;
+}
+
+function openProDialog({ requiredCapability = null, message = "" } = {}) {
+  if (!els.proDialog) return;
+  const capHint = requiredCapability ? `Pro required: ${requiredCapability}` : "";
+  setProDialogError(message || capHint);
+  updateProUi();
+  els.proDialog.classList.remove("hidden");
+}
+
+function closeProDialog() {
+  if (!els.proDialog) return;
+  els.proDialog.classList.add("hidden");
+  setProDialogError("");
+}
+
+async function handleProRequired(res, capability = null) {
+  const requiredCapability = res?.requiredCapability || capability || null;
+  await refreshEntitlements("pro-required");
+  openProDialog({
+    requiredCapability,
+    message: res?.error || ""
+  });
+}
+
 function beginTask(label = "processing...") {
   state.taskDepth += 1;
   if (!els.taskProgress) return;
@@ -1077,6 +1197,15 @@ async function runExportFromDialog() {
   const ctx = state.exportDialogCtx;
   if (!ctx) return;
   const format = normalizeExportFormat(els.exportFormat?.value || ctx.format);
+  const pngScale = format === "png" && els.exportPngQuality?.value === "highres" ? 2 : 1;
+  const requiredCapability = requiredCapabilityForExport(format, { pngScale });
+  if (requiredCapability && !hasCapability(requiredCapability)) {
+    await handleProRequired(
+      { code: "PRO_REQUIRED", requiredCapability, error: `Pro required: ${requiredCapability}` },
+      requiredCapability
+    );
+    return;
+  }
   const validation = validateExportPath(els.exportPathInput?.value, format);
   if (!validation.ok) {
     setExportError(validation.error);
@@ -1105,9 +1234,9 @@ async function runExportFromDialog() {
     }
     try {
       setTaskProgress(0.35, "rendering png...");
-      const pngBase64 = await svgToPng(svgText);
+      const pngBase64 = await svgToPng(svgText, { scale: pngScale });
       setTaskProgress(0.75, "saving png...");
-      res = await window.api?.exportWritePngFile?.({ pngBase64, filePath });
+      res = await window.api?.exportWritePngFile?.({ pngBase64, filePath, pngScale });
     } catch (err) {
       setExportError(err?.message || "PNG変換に失敗しました。");
       return;
@@ -1120,6 +1249,10 @@ async function runExportFromDialog() {
     res = await window.api?.exportWriteModelJsonFile?.({ modelJson, filePath });
   }
   if (!res?.ok) {
+    if (res?.code === "PRO_REQUIRED") {
+      await handleProRequired(res, requiredCapability);
+      return;
+    }
     if (!res?.canceled) setExportError(res?.error || "Exportに失敗しました。");
     return;
   }
@@ -1136,8 +1269,25 @@ async function runExportFromDialog() {
 function openExportDialog(initialFormat) {
   if (!els.exportDialog || !els.exportFormat || !els.exportPathInput) return;
   const format = normalizeExportFormat(initialFormat);
+  const requiredCapability = requiredCapabilityForExport(format, { pngScale: 1 });
+  if (requiredCapability && !hasCapability(requiredCapability)) {
+    void handleProRequired(
+      { code: "PRO_REQUIRED", requiredCapability, error: `Pro required: ${requiredCapability}` },
+      requiredCapability
+    );
+    return;
+  }
   state.exportDialogCtx = { format };
   els.exportFormat.value = format;
+  if (els.exportPngQuality) {
+    els.exportPngQuality.value = "standard";
+  }
+  if (els.exportPngQualityRow) {
+    els.exportPngQualityRow.classList.toggle("hidden", format !== "png");
+  }
+  if (els.exportPngQualityHint) {
+    els.exportPngQualityHint.classList.add("hidden");
+  }
   els.exportPathInput.value = buildDefaultExportPath(format);
   if (els.exportOpenFolder) els.exportOpenFolder.checked = false;
   renderExportRecentPaths();
@@ -1158,18 +1308,39 @@ function wireExportDialog() {
 
   els.exportFormat.addEventListener("change", () => {
     const format = normalizeExportFormat(els.exportFormat.value);
+    if (els.exportPngQualityRow) {
+      els.exportPngQualityRow.classList.toggle("hidden", format !== "png");
+    }
     const v = String(els.exportPathInput.value || "").trim();
     els.exportPathInput.value = v ? normalizeExportPathInput(v, format) : buildDefaultExportPath(format);
     setExportError("");
+    updateProUi();
   });
+
+  if (els.exportPngQuality) {
+    els.exportPngQuality.addEventListener("change", () => {
+      const isHigh = els.exportPngQuality.value === "highres";
+      if (isHigh && !hasCapability(PRO_CAP_EXPORT_PNG_HIGHRES)) {
+        els.exportPngQuality.value = "standard";
+        void handleProRequired(
+          { code: "PRO_REQUIRED", requiredCapability: PRO_CAP_EXPORT_PNG_HIGHRES, error: `Pro required: ${PRO_CAP_EXPORT_PNG_HIGHRES}` },
+          PRO_CAP_EXPORT_PNG_HIGHRES
+        );
+      }
+      updateProUi();
+    });
+  }
 
   els.btnExportBrowse?.addEventListener("click", async () => {
     const format = normalizeExportFormat(els.exportFormat.value);
+    const pngScale = format === "png" && els.exportPngQuality?.value === "highres" ? 2 : 1;
     const currentPath = String(els.exportPathInput.value || "").trim() || buildDefaultExportPath(format);
-    const res = await window.api?.chooseExportPath?.({ format, filePath: currentPath });
+    const res = await window.api?.chooseExportPath?.({ format, filePath: currentPath, pngScale });
     if (res?.ok && res.filePath) {
       els.exportPathInput.value = res.filePath;
       setExportError("");
+    } else if (res?.code === "PRO_REQUIRED") {
+      await handleProRequired(res, requiredCapabilityForExport(format, { pngScale }));
     } else if (res && !res.canceled) {
       setExportError(res.error || "保存先の選択に失敗しました。");
     }
@@ -1184,6 +1355,49 @@ function wireExportDialog() {
   els.exportDialog.addEventListener("click", (evt) => {
     if (evt.target === els.exportDialog) closeExportDialog();
   });
+}
+
+function wireProDialog() {
+  if (els.btnProUnlock) {
+    els.btnProUnlock.addEventListener("click", async () => {
+      await refreshEntitlements("open-pro-dialog");
+      openProDialog();
+    });
+  }
+  if (els.btnProClose) {
+    els.btnProClose.addEventListener("click", () => closeProDialog());
+  }
+  if (els.proDialog) {
+    els.proDialog.addEventListener("click", (evt) => {
+      if (evt.target === els.proDialog) closeProDialog();
+    });
+  }
+  if (els.btnProPurchase) {
+    els.btnProPurchase.addEventListener("click", async () => {
+      setProDialogError("");
+      const res = await window.api?.entitlementsPurchasePro?.();
+      if (!res?.ok) {
+        setProDialogError(res?.error || "Purchase failed.");
+        await refreshEntitlements("purchase-failed");
+        return;
+      }
+      await refreshEntitlements("purchase-success");
+      showToast("Pro status updated");
+    });
+  }
+  if (els.btnProRestore) {
+    els.btnProRestore.addEventListener("click", async () => {
+      setProDialogError("");
+      const res = await window.api?.entitlementsRestore?.();
+      if (!res?.ok) {
+        setProDialogError(res?.error || "Restore failed.");
+        await refreshEntitlements("restore-failed");
+        return;
+      }
+      await refreshEntitlements("restore-success");
+      showToast("Purchase restore completed");
+    });
+  }
 }
 
 function getEditorBaseText() {
@@ -4438,7 +4652,7 @@ function getModelJsonText() {
   return JSON.stringify(model, null, 2);
 }
 
-async function svgToPng(svgText) {
+async function svgToPng(svgText, { scale = 1 } = {}) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgText, "image/svg+xml");
   const svgEl = doc.documentElement;
@@ -4470,12 +4684,13 @@ async function svgToPng(svgText) {
   });
 
   const dpr = window.devicePixelRatio || 1;
+  const factor = Math.max(1, Number(scale) || 1);
   const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(width * dpr);
-  canvas.height = Math.ceil(height * dpr);
+  canvas.width = Math.ceil(width * dpr * factor);
+  canvas.height = Math.ceil(height * dpr * factor);
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(dpr * factor, 0, 0, dpr * factor, 0, 0);
   ctx.drawImage(img, 0, 0, width, height);
   URL.revokeObjectURL(url);
   return canvas.toDataURL("image/png");
@@ -4607,8 +4822,10 @@ async function boot() {
   }
   if (els.inspectorBody) els.inspectorBody.textContent = "Select a node/edge to edit";
   setInspectorHeader("Inspector", "Select", "muted");
+  await refreshEntitlements("boot");
 
   wireToolbar();
+  wireProDialog();
   wireNativeMenuActions();
   wireModelControls();
   wirePreviewZoom();

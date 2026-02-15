@@ -37,7 +37,13 @@ contextBridge.exposeInMainWorld("api", {
   exportModelJson: (args) => ipcRenderer.invoke("export:modelJson", args),
   chooseExportPath: (args) => ipcRenderer.invoke("dialog:chooseExportPath", args),
   exportWriteFile: (args) => ipcRenderer.invoke("export:writeFile", args),
+  exportWritePngFile: (args) => ipcRenderer.invoke("export:writePngFile", args),
+  exportWritePdfFile: (args) => ipcRenderer.invoke("export:writePdfFile", args),
+  exportWriteModelJsonFile: (args) => ipcRenderer.invoke("export:writeModelJsonFile", args),
   showItemInFolder: (args) => ipcRenderer.invoke("shell:showItemInFolder", args),
+  entitlementsGetStatus: () => ipcRenderer.invoke("entitlements:getStatus"),
+  entitlementsPurchasePro: () => ipcRenderer.invoke("entitlements:purchasePro"),
+  entitlementsRestore: () => ipcRenderer.invoke("entitlements:restore"),
 
   getDiagnostics: () => ipcRenderer.invoke("diag:getInfo"),
   getGpuStatus: () => ipcRenderer.invoke("diag:getGpuStatus"),

@@ -79,6 +79,16 @@
             <button id="btnExportBrowse" class="btn" type="button">参照...</button>
           </div>
         </div>
+        <div id="exportPngQualityRow" class="propRow hidden">
+          <label class="propLabel" for="exportPngQuality">PNG品質</label>
+          <div class="row">
+            <select id="exportPngQuality" class="select">
+              <option value="standard">Standard</option>
+              <option value="highres">High-res (Pro)</option>
+            </select>
+            <span id="exportPngQualityHint" class="mono exportHint hidden">🔒 Proで解放</span>
+          </div>
+        </div>
         <label class="toggle">
           <input type="checkbox" id="exportOpenFolder" />
           Open folder after export
@@ -88,6 +98,20 @@
       <div class="modalFooter">
         <button id="btnExportCancel" class="btn" type="button">Cancel</button>
         <button id="btnExportRun" class="btn" type="button">Export</button>
+      </div>
+    </div>
+  </div>
+  <div id="proDialog" class="modal hidden">
+    <div class="modalCard">
+      <div class="modalTitle">Pro Unlock</div>
+      <div class="modalBody">
+        <div id="proStatusText" class="mono">Status: Free</div>
+        <div id="proStatusError" class="exportError hidden"></div>
+      </div>
+      <div class="modalFooter">
+        <button id="btnProRestore" class="btn" type="button">購入を復元</button>
+        <button id="btnProPurchase" class="btn" type="button">Proを有効化</button>
+        <button id="btnProClose" class="btn" type="button">閉じる</button>
       </div>
     </div>
   </div>
@@ -213,6 +237,7 @@
     </div>
 
     <div class="toolbarRight">
+      <button id="btnProUnlock" class="btn btnMini" type="button">Free</button>
       <div class="status">
         <div class="statusMain">
           <span id="statusText" class="mono">ready</span>

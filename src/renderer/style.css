@@ -1100,6 +1100,19 @@ body:not(.right-collapsed) .edgeBtn.right {
 .exportBody .row {
   margin-bottom: 0;
 }
+.exportHint {
+  color: var(--muted);
+  font-size: 11px;
+}
+.exportHint.hidden {
+  display: none;
+}
+
+.btn.locked::after {
+  content: " 🔒Pro";
+  font-size: 10px;
+  color: var(--muted);
+}
 
 .exportError {
   color: var(--danger);

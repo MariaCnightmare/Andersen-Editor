@@ -3,8 +3,10 @@ const path = require("path");
 const fs = require("fs");
 const { installAppMenu, wireMenuStateIpc } = require("./appMenu.cjs");
 const { summarizeGpuStatus, summarizeGpuInfo, formatDiagnosticsText } = require("./gpuDiagnostics.cjs");
+const { createEntitlementService, resolveExportCapability } = require("./entitlements/service.cjs");
 
 let mainWindow = null;
+const entitlements = createEntitlementService({ logger: console });
 const isWsl = !!(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
 
 app.commandLine.appendSwitch("high-dpi-support", "1");
@@ -269,7 +271,8 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await entitlements.refresh("startup");
   wireMenuStateIpc();
   createWindow();
   if (mainWindow) installAppMenu(mainWindow);
@@ -286,6 +289,22 @@ app.on("window-all-closed", () => {
 function ensureWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) throw new Error("Main window not available");
   return mainWindow;
+}
+
+function proRequiredResponse(capability) {
+  return {
+    ok: false,
+    code: "PRO_REQUIRED",
+    requiredCapability: capability,
+    error: `Pro required: ${capability}`,
+    entitlements: entitlements.getStatus()
+  };
+}
+
+function guardCapabilityOrNull(capability) {
+  if (!capability) return null;
+  if (entitlements.hasCapability(capability)) return null;
+  return proRequiredResponse(capability);
 }
 
 let gpuDiagCache = {
@@ -343,6 +362,19 @@ ipcMain.handle("diag:getGpuStatus", async () => {
     summary: gpu.summary,
     info: gpu.info
   };
+});
+
+ipcMain.handle("entitlements:getStatus", async () => {
+  const status = await entitlements.refresh("ipc:getStatus");
+  return { ok: true, status };
+});
+
+ipcMain.handle("entitlements:purchasePro", async () => {
+  return entitlements.purchasePro();
+});
+
+ipcMain.handle("entitlements:restore", async () => {
+  return entitlements.restore();
 });
 
 ipcMain.handle("diag:copyToClipboard", async () => {
@@ -561,6 +593,9 @@ ipcMain.handle("dialog:chooseExportPath", async (_evt, args) => {
             : rawFormat === "modeljson"
               ? "modelJson"
               : "mermaid";
+    const cap = resolveExportCapability({ format, pngScale: args?.pngScale || 1 });
+    const blocked = guardCapabilityOrNull(cap);
+    if (blocked) return blocked;
     const requestedPath = String(args?.filePath || "").trim();
     const ext = extensionForFormat(format);
     const defaultPath = normalizePathForFormat(requestedPath || `diagram${ext}`, format);
@@ -615,6 +650,12 @@ ipcMain.handle("export:writeFile", async (_evt, args) => {
 
 ipcMain.handle("export:writePngFile", async (_evt, args) => {
   try {
+    const cap = resolveExportCapability({
+      format: "png",
+      pngScale: Number(args?.pngScale || 1)
+    });
+    const blocked = guardCapabilityOrNull(cap);
+    if (blocked) return blocked;
     const filePath = normalizePathForFormat(args?.filePath, "png");
     const pngBase64 = String(args?.pngBase64 || "");
     if (!filePath) return { ok: false, error: "filePath is empty." };
@@ -629,6 +670,8 @@ ipcMain.handle("export:writePngFile", async (_evt, args) => {
 
 ipcMain.handle("export:writePdfFile", async (_evt, args) => {
   try {
+    const blocked = guardCapabilityOrNull(resolveExportCapability({ format: "pdf" }));
+    if (blocked) return blocked;
     const win = ensureWindow();
     const filePath = normalizePathForFormat(args?.filePath, "pdf");
     if (!filePath) return { ok: false, error: "filePath is empty." };
@@ -651,6 +694,8 @@ ipcMain.handle("export:writePdfFile", async (_evt, args) => {
 
 ipcMain.handle("export:writeModelJsonFile", async (_evt, args) => {
   try {
+    const blocked = guardCapabilityOrNull(resolveExportCapability({ format: "modelJson" }));
+    if (blocked) return blocked;
     const filePath = normalizePathForFormat(args?.filePath, "modelJson");
     const modelJson = String(args?.modelJson || "");
     if (!filePath) return { ok: false, error: "filePath is empty." };
@@ -708,6 +753,12 @@ ipcMain.handle("export:mermaid", async (_evt, args) => {
 });
 
 ipcMain.handle("export:png", async (_evt, args) => {
+  const cap = resolveExportCapability({
+    format: "png",
+    pngScale: Number(args?.pngScale || 1)
+  });
+  const blocked = guardCapabilityOrNull(cap);
+  if (blocked) return blocked;
   const win = ensureWindow();
   const { pngBase64, defaultFilePath } = args || {};
   if (!pngBase64) return { ok: false, error: "pngBase64 is empty." };
@@ -725,6 +776,8 @@ ipcMain.handle("export:png", async (_evt, args) => {
 });
 
 ipcMain.handle("export:pdf", async (_evt, args) => {
+  const blocked = guardCapabilityOrNull(resolveExportCapability({ format: "pdf" }));
+  if (blocked) return blocked;
   const win = ensureWindow();
   const { defaultFilePath } = args || {};
 
@@ -751,6 +804,8 @@ ipcMain.handle("export:pdf", async (_evt, args) => {
 });
 
 ipcMain.handle("export:modelJson", async (_evt, args) => {
+  const blocked = guardCapabilityOrNull(resolveExportCapability({ format: "modelJson" }));
+  if (blocked) return blocked;
   const win = ensureWindow();
   const { modelJson, defaultFilePath } = args || {};
   if (!modelJson) return { ok: false, error: "modelJson is empty." };
