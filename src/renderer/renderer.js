@@ -2865,7 +2865,9 @@ function attachNodeInteractions(svg) {
     });
   }
 
-  const edgePaths = svg.querySelectorAll("g.edgePath");
+  const edgePathGroups = Array.from(svg.querySelectorAll("g.edgePath"));
+  const edgePathFallback = Array.from(svg.querySelectorAll("path[id^='L-']"));
+  const edgePaths = edgePathGroups.length ? edgePathGroups : edgePathFallback;
   const edgeLabels = svg.querySelectorAll("g.edgeLabel");
   const edgePathMap = new Map();
   const edgeLabelMap = new Map();
@@ -2889,7 +2891,7 @@ function attachNodeInteractions(svg) {
     let from = null;
     let to = null;
     let label = "";
-    const title = g.querySelector("title")?.textContent || "";
+    const title = g.querySelector?.("title")?.textContent || "";
     const mLabel = title.match(/^(.+?)\s*[-.=]+>.*?\|(.+?)\|\s*(.+)$/);
     if (mLabel) {
       from = mLabel[1].trim();
@@ -2906,7 +2908,7 @@ function attachNodeInteractions(svg) {
       const t = edgeLabels[idx].querySelector("text");
       if (t && t.textContent) label = t.textContent.trim();
     }
-    if (!from || !to) {
+    if ((!from || !to) && g.getAttribute) {
       const id = g.getAttribute("id") || "";
       const idMatch = id.match(/^L-([^\\-]+)-([^\\-]+)/);
       if (idMatch) {
@@ -2957,7 +2959,7 @@ function attachNodeInteractions(svg) {
     if (edge) {
       mappedEdgeIds.add(edge.id);
       g.dataset.aeEdgeId = edge.id;
-      g.querySelectorAll("*").forEach((el) => {
+      g.querySelectorAll?.("*").forEach((el) => {
         el.dataset.aeEdgeId = edge.id;
       });
       edgePathMap.set(edge.id, g);
@@ -3019,6 +3021,14 @@ function attachNodeInteractions(svg) {
     for (const node of path) {
       if (!node || node === svg || !node.dataset) continue;
       if (node.dataset.aeEdgeId) return node.dataset.aeEdgeId;
+      if (node.getAttribute) {
+        const rawId = node.getAttribute("id") || "";
+        const m = rawId.match(/^L-([^\\-]+)-([^\\-]+)/);
+        if (m) {
+          const hit = state.model.edges.find((e) => e.from === m[1] && e.to === m[2]);
+          if (hit) return hit.id;
+        }
+      }
     }
     const host = evt.target?.closest?.("g.edgePath, g.edgeLabel");
     return host?.dataset?.aeEdgeId || null;
@@ -3050,7 +3060,10 @@ function attachNodeInteractions(svg) {
     if (!edge) return;
     const edgeGroup = edgePathMap.get(edgeId);
     if (!edgeGroup) return;
-    const paths = Array.from(edgeGroup.querySelectorAll("path"));
+    const paths =
+      edgeGroup.tagName?.toLowerCase() === "path"
+        ? [edgeGroup]
+        : Array.from(edgeGroup.querySelectorAll("path"));
     if (!paths.length) return;
     const from = getNodeCenter(edge.from);
     const to = getNodeCenter(edge.to);
