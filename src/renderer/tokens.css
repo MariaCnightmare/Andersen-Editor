@@ -1,0 +1,8 @@
+:root{
+  --bg:#0b0f14;
+  --fg:#e6edf3;
+  --muted:#8b949e;
+  --border:rgba(255,255,255,.12);
+  --accent:#2f81f7;
+  --radius:12px;
+}
