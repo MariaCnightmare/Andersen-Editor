@@ -2934,6 +2934,19 @@ function attachNodeInteractions(svg) {
   edgePaths.forEach((g, idx) => {
     const sig = parseEdgeSignature(g, idx);
     let edge = null;
+    const rawId = g.getAttribute?.("id") || "";
+    const idPair = rawId.match(/^L-([^\\-]+)-([^\\-]+)/);
+    if (idPair) {
+      const pairKey = `${idPair[1]}|${idPair[2]}`;
+      const pair = candidatesByPair.get(pairKey) || [];
+      if (pair.length === 1) {
+        edge = pair[0];
+      } else if (pair.length > 1) {
+        const cursor = pairCursor.get(pairKey) || 0;
+        edge = pair[Math.min(cursor, pair.length - 1)] || null;
+        pairCursor.set(pairKey, cursor + 1);
+      }
+    }
     if (sig.from && sig.to) {
       const key = `${sig.from}|${sig.to}|${sig.label || ""}`;
       const exact = candidatesByKey.get(key) || [];
@@ -3115,6 +3128,38 @@ function attachNodeInteractions(svg) {
     liveMutatedPaths.clear();
     liveMutatedLabels.clear();
   };
+
+  const syncPinnedNodeEdges = () => {
+    const pinned = new Set(
+      (state.model.nodes || [])
+        .filter((n) => n?.pinned)
+        .map((n) => n.id)
+    );
+    if (!pinned.size) return;
+    for (const edge of state.model.edges || []) {
+      if (!pinned.has(edge.from) && !pinned.has(edge.to)) continue;
+      const host = edgePathMap.get(edge.id);
+      if (!host) continue;
+      const from = getNodeCenter(edge.from);
+      const to = getNodeCenter(edge.to);
+      if (!from || !to) continue;
+      const paths =
+        host.tagName?.toLowerCase() === "path" ? [host] : Array.from(host.querySelectorAll("path"));
+      for (const p of paths) {
+        const lf = toLocalPoint(p, from);
+        const lt = toLocalPoint(p, to);
+        p.setAttribute("d", `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`);
+      }
+      const labelG = edgeLabelMap.get(edge.id);
+      if (labelG) {
+        const mx = (from.x + to.x) / 2;
+        const my = (from.y + to.y) / 2;
+        const localMid = toLocalPoint(labelG, { x: mx, y: my });
+        labelG.setAttribute("transform", `translate(${localMid.x},${localMid.y})`);
+      }
+    }
+  };
+  syncPinnedNodeEdges();
 
   const updateDragOverlay = () => {
     if (!dragNode?.active) return;
