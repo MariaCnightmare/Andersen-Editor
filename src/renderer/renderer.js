@@ -3461,7 +3461,7 @@ function wireToolbar() {
     applyThemeVars(theme);
     initMermaidBase(theme).catch(showError);
     if (state.model) state.model.themeId = themeId;
-    renderFromModel();
+    void renderFromText({ live: true });
   });
 
   els.selDir.addEventListener("change", () => {
