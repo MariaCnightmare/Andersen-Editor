@@ -1994,10 +1994,11 @@ async function renderFromText({ live = false } = {}) {
   if (embedded) {
     normalizeModelClassNames(embedded);
     state.model = embedded;
+    const previewText = generateMermaid(state.model, state.pack, state.theme);
     renderLists();
     renderPropPanel();
     updateInternalToggleVisibility();
-    await renderMermaid(text, { expectedRev: rev });
+    await renderMermaid(previewText, { expectedRev: rev });
     if (!isLatestRev(rev)) return false;
     state.textDirty = false;
     updateApplyButton();
@@ -2035,7 +2036,8 @@ async function renderFromText({ live = false } = {}) {
   updateInternalToggleVisibility();
   renderLists();
   renderPropPanel();
-  await renderMermaid(text, { expectedRev: rev });
+  const previewText = generateMermaid(state.model, state.pack, state.theme);
+  await renderMermaid(previewText, { expectedRev: rev });
   if (!isLatestRev(rev)) return false;
   state.textDirty = false;
   updateApplyButton();
@@ -3296,9 +3298,8 @@ function wireToolbar() {
   });
 
   els.btnRelayout.addEventListener("click", () => {
-    // Re-layout should keep pinned offsets by default.
-    // (Reset pins can be introduced as a separate action.)
-    renderFromModel();
+    // Re-layout should keep source text intact.
+    void renderFromText({ live: true });
     markModelDirty("re-layout requested");
   });
 
