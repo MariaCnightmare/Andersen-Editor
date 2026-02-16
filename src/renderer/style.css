@@ -205,6 +205,7 @@ body.dragging {
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
   position: relative;
+  z-index: 300;
   font-size: 12px;
 }
 
@@ -260,8 +261,7 @@ body.dragging {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
   padding-bottom: 2px;
 }
 
@@ -334,7 +334,7 @@ body.dragging {
   box-shadow: var(--shadow-float);
   display: grid;
   gap: 10px;
-  z-index: 80;
+  z-index: 1200;
 }
 .menuSection {
   display: grid;
@@ -382,6 +382,10 @@ body.dragging {
   .toolbarLeft { grid-area: left; }
   .toolbarCenter { grid-area: center; }
   .toolbarRight { grid-area: right; }
+  .toolbarCenter {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
   .brandSub {
     max-width: 240px;
   }
@@ -764,6 +768,12 @@ body.connect-mode #previewWrap {
   cursor: crosshair;
 }
 
+body.connect-mode #previewWrap,
+body.connect-mode #previewWrap * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 #previewWrap .previewZoom,
 #previewWrap .previewZoom * {
   cursor: default;
@@ -817,6 +827,7 @@ body.connect-mode #previewWrap {
 .preview svg {
   max-width: none;
   height: auto;
+  overflow: visible;
   shape-rendering: geometricPrecision;
   text-rendering: geometricPrecision;
 }
@@ -832,11 +843,22 @@ body.connect-mode #previewWrap {
   fill: #ffd36b;
 }
 
+.preview svg .ae-handle.ae-handle-src {
+  fill: #ffd36b;
+  stroke: #7a4f00;
+}
+
 .preview svg .ae-temp-edge {
   stroke: #4fd4ff;
   stroke-width: 2px;
-  stroke-dasharray: 4 4;
+  stroke-dasharray: none;
+  opacity: 0.9;
   pointer-events: none;
+}
+
+.preview svg g.edgePath path,
+.preview svg g.edgeLabel {
+  pointer-events: auto;
 }
 
 .inspector .badge {
@@ -1081,6 +1103,19 @@ body:not(.right-collapsed) .edgeBtn.right {
 
 .exportBody .row {
   margin-bottom: 0;
+}
+.exportHint {
+  color: var(--muted);
+  font-size: 11px;
+}
+.exportHint.hidden {
+  display: none;
+}
+
+.btn.locked::after {
+  content: " 🔒Pro";
+  font-size: 10px;
+  color: var(--muted);
 }
 
 .exportError {

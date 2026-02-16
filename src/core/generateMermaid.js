@@ -7,10 +7,32 @@ import {
   normalizeNodeClassName
 } from "./className.mjs";
 
+function normalizeUnsafeText(s) {
+  return String(s ?? "")
+    .replace(/\r?\n/g, " ")
+    .replace(/%%/g, "％％")
+    .replace(/\|/g, "¦")
+    .replace(/"/g, "”");
+}
+
+function sanitizeNodeLabel(s) {
+  const t = normalizeUnsafeText(s);
+  // Mermaid token delimiters for node shapes
+  return t
+    .replace(/\[/g, "(")
+    .replace(/\]/g, ")")
+    .replace(/\{/g, "(")
+    .replace(/\}/g, ")");
+}
+
+function sanitizeEdgeLabel(s) {
+  const t = normalizeUnsafeText(s);
+  // Edge labels are wrapped by |...|
+  return t.replace(/\|/g, "¦");
+}
+
 function sanitizeLabel(s) {
-  const t = String(s ?? "");
-  // Mermaidのブラケットを壊しにくくする最低限のサニタイズ
-  return t.replace(/\r?\n/g, " ").replace(/\]/g, ")").replace(/\[/g, "(");
+  return sanitizeNodeLabel(s);
 }
 
 function normalizeColorToken(value) {
@@ -28,7 +50,7 @@ function normalizeStrokeWidth(value) {
 }
 
 function nodeShape(shape, label) {
-  const L = sanitizeLabel(label);
+  const L = sanitizeNodeLabel(label);
   switch (shape) {
     case "rect":
       return `[${L}]`;
@@ -109,7 +131,7 @@ export function generateMermaid(model, pack, theme) {
   m.edges.forEach((e, idx) => {
     const ek = pack.edgeKinds[e.kind];
     const arrow = ek ? ek.arrow : "-->";
-    const label = sanitizeLabel(e.label || "");
+    const label = sanitizeEdgeLabel(e.label || "");
     if (label) {
       lines.push(`  ${e.from} ${arrow}|${label}| ${e.to}`);
     } else {
@@ -131,14 +153,33 @@ export function generateMermaid(model, pack, theme) {
   });
   if (m.edges.length) lines.push("");
 
-  // classDefs
-  if (theme.classDefs) {
-    lines.push(...emitClassDefLines(theme.classDefs));
-    lines.push("");
-  }
-
   // class assignments (nodes)
   const nodeClassLines = buildNodeClassAssignments(m.nodes, pack.roles);
+  const usedClasses = new Set();
+  for (const n of m.nodes) {
+    const roleClass = pack.roles?.[n.role]?.className || "";
+    const cls = normalizeClassName(n?.className || roleClass || "");
+    if (cls) usedClasses.add(cls);
+  }
+  for (const b of m.boundaries || []) {
+    const boundaryClass = normalizeClassName(pack.boundaryRoles?.[b.role]?.className || "");
+    if (boundaryClass) usedClasses.add(boundaryClass);
+  }
+
+  // classDefs (emit only classes that are actually used by current model)
+  if (theme.classDefs && usedClasses.size) {
+    const filtered = {};
+    for (const [name, style] of Object.entries(theme.classDefs)) {
+      const cls = normalizeClassName(name);
+      if (cls && usedClasses.has(cls)) filtered[name] = style;
+    }
+    const classDefLines = emitClassDefLines(filtered);
+    if (classDefLines.length) {
+      lines.push(...classDefLines);
+      lines.push("");
+    }
+  }
+
   lines.push(...nodeClassLines);
   if (nodeClassLines.length) lines.push("");
 

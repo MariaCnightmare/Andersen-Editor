@@ -20,6 +20,9 @@ try {
 }
 
 const $ = (id) => document.getElementById(id);
+const PRO_CAP_EXPORT_PDF = "export.pdf";
+const PRO_CAP_EXPORT_PNG_HIGHRES = "export.png.highres";
+const PRO_CAP_EXPORT_MODEL_JSON = "export.modelJson";
 
 const state = {
   pack: null,
@@ -49,6 +52,7 @@ const state = {
   showInternalBlocks: false,
   devMode: false,
   connectMode: false,
+  connectFromNodeId: null,
   inspectorVisible: false,
   prevRawBlocks: null,
   mermaid: null,
@@ -64,7 +68,9 @@ const state = {
   menuHandlers: {},
   exportRecentPaths: [],
   statusDetailsOpen: false,
-  lastAutoScaleKey: ""
+  lastAutoScaleKey: "",
+  appliedThemeVarKeys: [],
+  entitlements: null
 };
 
 const els = {
@@ -163,6 +169,9 @@ const els = {
   btnTextPromptOk: $("btnTextPromptOk"),
   exportDialog: $("exportDialog"),
   exportFormat: $("exportFormat"),
+  exportPngQualityRow: $("exportPngQualityRow"),
+  exportPngQuality: $("exportPngQuality"),
+  exportPngQualityHint: $("exportPngQualityHint"),
   exportPathInput: $("exportPathInput"),
   exportRecentList: $("exportRecentList"),
   btnExportBrowse: $("btnExportBrowse"),
@@ -170,6 +179,13 @@ const els = {
   exportError: $("exportError"),
   btnExportCancel: $("btnExportCancel"),
   btnExportRun: $("btnExportRun"),
+  btnProUnlock: $("btnProUnlock"),
+  proDialog: $("proDialog"),
+  proStatusText: $("proStatusText"),
+  proStatusError: $("proStatusError"),
+  btnProPurchase: $("btnProPurchase"),
+  btnProRestore: $("btnProRestore"),
+  btnProClose: $("btnProClose"),
   newDialog: $("newDialog"),
   btnNewCancel: $("btnNewCancel"),
   btnAddNode: $("btnAddNode"),
@@ -420,7 +436,8 @@ function addCtxGroup(container, label, items) {
 
 function requestTextInput(title, defaultValue = "") {
   if (!els.textPromptDialog || !els.textPromptInput || !els.textPromptTitle) {
-    return Promise.resolve(null);
+    const picked = window.prompt(title || "Input", defaultValue || "");
+    return Promise.resolve(picked == null ? null : String(picked).trim());
   }
   return new Promise((resolve) => {
     const close = (value) => {
@@ -612,6 +629,7 @@ function setInspectorHeader(title, badgeText, badgeClass = "") {
 
 function setConnectMode(on) {
   state.connectMode = !!on;
+  if (!state.connectMode) state.connectFromNodeId = null;
   document.body.classList.toggle("connect-mode", state.connectMode);
   if (els.btnConnect) els.btnConnect.classList.toggle("active", state.connectMode);
   const svg = els.preview.querySelector("svg");
@@ -778,6 +796,15 @@ function buildTemplateMermaid(kind) {
   return buildSampleMermaid();
 }
 
+function isModelEmpty(model) {
+  return !model || (
+    (!Array.isArray(model.nodes) || model.nodes.length === 0) &&
+    (!Array.isArray(model.edges) || model.edges.length === 0) &&
+    (!Array.isArray(model.boundaries) || model.boundaries.length === 0) &&
+    (!Array.isArray(model.rawBlocks) || model.rawBlocks.length === 0)
+  );
+}
+
 function getFallbackPack() {
   return {
     packId: "fallback-pack",
@@ -812,6 +839,27 @@ function getFallbackTheme() {
       "boundary-default": "fill:#eef2f7,stroke:#6b7280"
     }
   };
+}
+
+function clearThemeVars() {
+  if (!Array.isArray(state.appliedThemeVarKeys) || !state.appliedThemeVarKeys.length) return;
+  for (const key of state.appliedThemeVarKeys) {
+    document.documentElement.style.removeProperty(key);
+  }
+  state.appliedThemeVarKeys = [];
+}
+
+function applyThemeVars(theme) {
+  clearThemeVars();
+  const vars = theme && typeof theme === "object" ? theme.vars : null;
+  if (!vars || typeof vars !== "object") return;
+  const applied = [];
+  for (const [key, value] of Object.entries(vars)) {
+    if (!/^--[A-Za-z0-9_-]+$/.test(String(key))) continue;
+    document.documentElement.style.setProperty(key, String(value));
+    applied.push(key);
+  }
+  state.appliedThemeVarKeys = applied;
 }
 
 async function safeReadJson(relPath, fallbackValue, label) {
@@ -879,6 +927,112 @@ function showToast(message) {
   state.toastTimer = setTimeout(() => {
     els.toast.classList.add("hidden");
   }, 2000);
+}
+
+function hasCapability(capability) {
+  if (!capability) return true;
+  return !!state.entitlements?.capabilities?.[capability];
+}
+
+function requiredCapabilityForExport(format, { pngScale = 1 } = {}) {
+  const f = normalizeExportFormat(format);
+  if (f === "pdf") return PRO_CAP_EXPORT_PDF;
+  if (f === "modelJson") return PRO_CAP_EXPORT_MODEL_JSON;
+  if (f === "png" && Number(pngScale) > 1) return PRO_CAP_EXPORT_PNG_HIGHRES;
+  return null;
+}
+
+function setProDialogError(message) {
+  if (!els.proStatusError) return;
+  const msg = String(message || "");
+  if (!msg) {
+    els.proStatusError.textContent = "";
+    els.proStatusError.classList.add("hidden");
+    return;
+  }
+  els.proStatusError.textContent = msg;
+  els.proStatusError.classList.remove("hidden");
+}
+
+function updateProUi() {
+  const isPro = !!state.entitlements?.isPro;
+  const source = state.entitlements?.source || "free-default";
+  if (els.btnProUnlock) {
+    els.btnProUnlock.textContent = isPro ? "Pro" : "Free";
+    els.btnProUnlock.title = isPro ? `Pro unlocked (${source})` : "Free plan";
+  }
+  if (els.proStatusText) {
+    els.proStatusText.textContent = `Status: ${isPro ? "Pro" : "Free"} (${source})`;
+  }
+  const lockPdf = !hasCapability(PRO_CAP_EXPORT_PDF);
+  const lockModel = !hasCapability(PRO_CAP_EXPORT_MODEL_JSON);
+  if (els.btnExportPdf) {
+    els.btnExportPdf.classList.toggle("locked", lockPdf);
+  }
+  if (els.btnExportModelJson) {
+    els.btnExportModelJson.classList.toggle("locked", lockModel);
+  }
+  if (els.exportPngQualityHint) {
+    const showLock = !!els.exportPngQuality && els.exportPngQuality.value === "highres" && !hasCapability(PRO_CAP_EXPORT_PNG_HIGHRES);
+    els.exportPngQualityHint.classList.toggle("hidden", !showLock);
+  }
+}
+
+async function refreshEntitlements(reason = "manual") {
+  if (!window.api?.entitlementsGetStatus) {
+    state.entitlements = {
+      isPro: false,
+      source: "unsupported",
+      capabilities: {
+        [PRO_CAP_EXPORT_PDF]: false,
+        [PRO_CAP_EXPORT_PNG_HIGHRES]: false,
+        [PRO_CAP_EXPORT_MODEL_JSON]: false
+      }
+    };
+    updateProUi();
+    return state.entitlements;
+  }
+  const res = await window.api.entitlementsGetStatus();
+  if (res?.ok && res.status) {
+    state.entitlements = res.status;
+  } else {
+    state.entitlements = {
+      isPro: false,
+      source: "error",
+      capabilities: {
+        [PRO_CAP_EXPORT_PDF]: false,
+        [PRO_CAP_EXPORT_PNG_HIGHRES]: false,
+        [PRO_CAP_EXPORT_MODEL_JSON]: false
+      },
+      lastError: res?.error || "failed to load entitlements"
+    };
+    console.warn("[entitlements] refresh failed", { reason, error: res?.error || "unknown" });
+  }
+  updateProUi();
+  return state.entitlements;
+}
+
+function openProDialog({ requiredCapability = null, message = "" } = {}) {
+  if (!els.proDialog) return;
+  const capHint = requiredCapability ? `Pro required: ${requiredCapability}` : "";
+  setProDialogError(message || capHint);
+  updateProUi();
+  els.proDialog.classList.remove("hidden");
+}
+
+function closeProDialog() {
+  if (!els.proDialog) return;
+  els.proDialog.classList.add("hidden");
+  setProDialogError("");
+}
+
+async function handleProRequired(res, capability = null) {
+  const requiredCapability = res?.requiredCapability || capability || null;
+  await refreshEntitlements("pro-required");
+  openProDialog({
+    requiredCapability,
+    message: res?.error || ""
+  });
 }
 
 function beginTask(label = "processing...") {
@@ -1043,6 +1197,15 @@ async function runExportFromDialog() {
   const ctx = state.exportDialogCtx;
   if (!ctx) return;
   const format = normalizeExportFormat(els.exportFormat?.value || ctx.format);
+  const pngScale = format === "png" && els.exportPngQuality?.value === "highres" ? 2 : 1;
+  const requiredCapability = requiredCapabilityForExport(format, { pngScale });
+  if (requiredCapability && !hasCapability(requiredCapability)) {
+    await handleProRequired(
+      { code: "PRO_REQUIRED", requiredCapability, error: `Pro required: ${requiredCapability}` },
+      requiredCapability
+    );
+    return;
+  }
   const validation = validateExportPath(els.exportPathInput?.value, format);
   if (!validation.ok) {
     setExportError(validation.error);
@@ -1071,9 +1234,9 @@ async function runExportFromDialog() {
     }
     try {
       setTaskProgress(0.35, "rendering png...");
-      const pngBase64 = await svgToPng(svgText);
+      const pngBase64 = await svgToPng(svgText, { scale: pngScale });
       setTaskProgress(0.75, "saving png...");
-      res = await window.api?.exportWritePngFile?.({ pngBase64, filePath });
+      res = await window.api?.exportWritePngFile?.({ pngBase64, filePath, pngScale });
     } catch (err) {
       setExportError(err?.message || "PNG変換に失敗しました。");
       return;
@@ -1086,6 +1249,10 @@ async function runExportFromDialog() {
     res = await window.api?.exportWriteModelJsonFile?.({ modelJson, filePath });
   }
   if (!res?.ok) {
+    if (res?.code === "PRO_REQUIRED") {
+      await handleProRequired(res, requiredCapability);
+      return;
+    }
     if (!res?.canceled) setExportError(res?.error || "Exportに失敗しました。");
     return;
   }
@@ -1102,8 +1269,25 @@ async function runExportFromDialog() {
 function openExportDialog(initialFormat) {
   if (!els.exportDialog || !els.exportFormat || !els.exportPathInput) return;
   const format = normalizeExportFormat(initialFormat);
+  const requiredCapability = requiredCapabilityForExport(format, { pngScale: 1 });
+  if (requiredCapability && !hasCapability(requiredCapability)) {
+    void handleProRequired(
+      { code: "PRO_REQUIRED", requiredCapability, error: `Pro required: ${requiredCapability}` },
+      requiredCapability
+    );
+    return;
+  }
   state.exportDialogCtx = { format };
   els.exportFormat.value = format;
+  if (els.exportPngQuality) {
+    els.exportPngQuality.value = "standard";
+  }
+  if (els.exportPngQualityRow) {
+    els.exportPngQualityRow.classList.toggle("hidden", format !== "png");
+  }
+  if (els.exportPngQualityHint) {
+    els.exportPngQualityHint.classList.add("hidden");
+  }
   els.exportPathInput.value = buildDefaultExportPath(format);
   if (els.exportOpenFolder) els.exportOpenFolder.checked = false;
   renderExportRecentPaths();
@@ -1124,18 +1308,39 @@ function wireExportDialog() {
 
   els.exportFormat.addEventListener("change", () => {
     const format = normalizeExportFormat(els.exportFormat.value);
+    if (els.exportPngQualityRow) {
+      els.exportPngQualityRow.classList.toggle("hidden", format !== "png");
+    }
     const v = String(els.exportPathInput.value || "").trim();
     els.exportPathInput.value = v ? normalizeExportPathInput(v, format) : buildDefaultExportPath(format);
     setExportError("");
+    updateProUi();
   });
+
+  if (els.exportPngQuality) {
+    els.exportPngQuality.addEventListener("change", () => {
+      const isHigh = els.exportPngQuality.value === "highres";
+      if (isHigh && !hasCapability(PRO_CAP_EXPORT_PNG_HIGHRES)) {
+        els.exportPngQuality.value = "standard";
+        void handleProRequired(
+          { code: "PRO_REQUIRED", requiredCapability: PRO_CAP_EXPORT_PNG_HIGHRES, error: `Pro required: ${PRO_CAP_EXPORT_PNG_HIGHRES}` },
+          PRO_CAP_EXPORT_PNG_HIGHRES
+        );
+      }
+      updateProUi();
+    });
+  }
 
   els.btnExportBrowse?.addEventListener("click", async () => {
     const format = normalizeExportFormat(els.exportFormat.value);
+    const pngScale = format === "png" && els.exportPngQuality?.value === "highres" ? 2 : 1;
     const currentPath = String(els.exportPathInput.value || "").trim() || buildDefaultExportPath(format);
-    const res = await window.api?.chooseExportPath?.({ format, filePath: currentPath });
+    const res = await window.api?.chooseExportPath?.({ format, filePath: currentPath, pngScale });
     if (res?.ok && res.filePath) {
       els.exportPathInput.value = res.filePath;
       setExportError("");
+    } else if (res?.code === "PRO_REQUIRED") {
+      await handleProRequired(res, requiredCapabilityForExport(format, { pngScale }));
     } else if (res && !res.canceled) {
       setExportError(res.error || "保存先の選択に失敗しました。");
     }
@@ -1152,17 +1357,84 @@ function wireExportDialog() {
   });
 }
 
+function wireProDialog() {
+  if (els.btnProUnlock) {
+    els.btnProUnlock.addEventListener("click", async () => {
+      await refreshEntitlements("open-pro-dialog");
+      openProDialog();
+    });
+  }
+  if (els.btnProClose) {
+    els.btnProClose.addEventListener("click", () => closeProDialog());
+  }
+  if (els.proDialog) {
+    els.proDialog.addEventListener("click", (evt) => {
+      if (evt.target === els.proDialog) closeProDialog();
+    });
+  }
+  if (els.btnProPurchase) {
+    els.btnProPurchase.addEventListener("click", async () => {
+      setProDialogError("");
+      const res = await window.api?.entitlementsPurchasePro?.();
+      if (!res?.ok) {
+        setProDialogError(res?.error || "Purchase failed.");
+        await refreshEntitlements("purchase-failed");
+        return;
+      }
+      await refreshEntitlements("purchase-success");
+      showToast("Pro status updated");
+    });
+  }
+  if (els.btnProRestore) {
+    els.btnProRestore.addEventListener("click", async () => {
+      setProDialogError("");
+      const res = await window.api?.entitlementsRestore?.();
+      if (!res?.ok) {
+        setProDialogError(res?.error || "Restore failed.");
+        await refreshEntitlements("restore-failed");
+        return;
+      }
+      await refreshEntitlements("restore-success");
+      showToast("Purchase restore completed");
+    });
+  }
+}
+
 function getEditorBaseText() {
   return state.editor.getValue();
 }
 
+function toEditorDisplayText(text) {
+  const stripped = stripInternalBlocks(String(text ?? ""));
+  const lines = stripped.split(/\r?\n/).filter((line) => !/^\s*%%AE:MODEL\b/.test(line));
+  const normalized = lines.join("\n").replace(/\n{3,}/g, "\n\n");
+  const meaningful = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^%%\{.*\}%%$/.test(line));
+  if (meaningful.length === 1 && /^(flowchart|graph)\b/i.test(meaningful[0])) {
+    return "";
+  }
+  return /\r?\n$/.test(stripped) ? `${normalized}\n` : normalized;
+}
+
 function getFullSourceForOutput() {
-  const base = getEditorBaseText();
-  if (state.showInternalBlocks) return base;
-  const internal = buildInternalBlocksText(state.model?.rawBlocks || []);
+  const base = stripInternalBlocks(getEditorBaseText());
+  const normalized = [];
+  let initKept = false;
+  for (const line of String(base || "").split(/\r?\n/)) {
+    const t = line.trim();
+    if (/^%%AE:MODEL\b/.test(t)) continue;
+    if (/^%%\{.*\}%%$/.test(t)) {
+      if (initKept) continue;
+      initKept = true;
+    }
+    normalized.push(line);
+  }
   const modelLine = state.model ? embedModelComment(state.model) : "";
-  const parts = [base.trimEnd()];
+  const parts = [normalized.join("\n").trimEnd()];
   if (modelLine) parts.push(modelLine);
+  const internal = buildInternalBlocksText(state.model?.rawBlocks || []);
   if (internal) parts.push(internal);
   return parts.join("\n") + "\n";
 }
@@ -1219,15 +1491,44 @@ function formatMermaid(text) {
 }
 
 async function readJson(relPath) {
-  if (!window.api?.readAssetText) {
-    throw new Error("preload api unavailable: readAssetText");
-  }
   if (!relPath) {
     throw new Error("readJson path is empty");
   }
-  const res = await window.api.readAssetText(relPath);
-  if (!res.ok) throw new Error(res.error || `Failed to read ${relPath}`);
-  return JSON.parse(res.content);
+  let route = "none";
+  try {
+    if (window.api?.readAssetJson) {
+      route = "readAssetJson";
+      const res = await window.api.readAssetJson(relPath);
+      if (res && typeof res === "object" && Object.prototype.hasOwnProperty.call(res, "ok")) {
+        if (!res.ok) throw new Error(res.error || `Failed to read ${relPath}`);
+        return res.content;
+      }
+      return res;
+    }
+
+    if (window.api?.readAssetText) {
+      route = "readAssetText";
+      const res = await window.api.readAssetText(relPath);
+      const isWrapped = !!(res && typeof res === "object" && Object.prototype.hasOwnProperty.call(res, "ok"));
+      if (isWrapped && !res.ok) throw new Error(res.error || `Failed to read ${relPath}`);
+      const text = isWrapped ? res.content : res;
+      if (typeof text !== "string") {
+        throw new Error(`Invalid readAssetText response for ${relPath}`);
+      }
+      return JSON.parse(text);
+    }
+
+    route = "fetch";
+    const url = new URL(String(relPath).replace(/^\/+/, ""), location.origin + "/");
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText} ${response.url}`);
+    }
+    return await response.json();
+  } catch (err) {
+    console.warn("[boot] readJson failed", { route, relPath, error: err?.message || err });
+    throw err;
+  }
 }
 
 async function getMermaid() {
@@ -1373,6 +1674,7 @@ function debounce(fn, ms) {
 }
 
 function updateEditorText(text) {
+  const displayText = toEditorDisplayText(text);
   let cmCursor = null;
   let cmScroll = null;
   let taSel = null;
@@ -1385,8 +1687,8 @@ function updateEditorText(text) {
     taScroll = [els.srcTextarea.scrollTop || 0, els.srcTextarea.scrollLeft || 0];
   }
   state.syncingEditor = true;
-  state.lastProgrammaticEditorText = text ?? "";
-  state.editor.setValue(text);
+  state.lastProgrammaticEditorText = displayText ?? "";
+  state.editor.setValue(displayText);
   state.syncingEditor = false;
   if (state.editor?.cm && cmCursor && cmScroll) {
     state.editor.cm.setCursor(cmCursor);
@@ -1477,6 +1779,18 @@ function boundaryPrefix(role) {
     default:
       return "B";
   }
+}
+
+function addEdgeByNodes(from, to, { kind = null, label = "" } = {}) {
+  if (!from || !to || from === to) return false;
+  const ids = new Set(state.model.edges.map((e) => e.id));
+  const id = nextId("E", ids);
+  const edgeKind = kind || Object.keys(state.pack.edgeKinds || {})[0] || "http";
+  state.model.edges.push({ id, from, to, kind: edgeKind, label: String(label || "") });
+  pushHistory();
+  renderFromModel();
+  markModelDirty("edge added");
+  return true;
 }
 
 function refreshSelectors() {
@@ -1879,7 +2193,7 @@ function validateMermaidText(text) {
   return items;
 }
 
-function renderFromModel({ preserveWarnings = false } = {}) {
+function renderFromModel({ preserveWarnings = false, updateSource = true } = {}) {
   const rev = bumpSyncRev();
   state.model = normalizeModelClassNames(state.model);
   state.model = normalizeModel(clone(state.model));
@@ -1897,21 +2211,25 @@ function renderFromModel({ preserveWarnings = false } = {}) {
     setProblems(validation, { status: "error", open: true });
     return;
   }
-  const fullText = `${mermaidText}\n${buildInternalBlocksText(state.model.rawBlocks || [])}\n`;
-  const displayText = state.showInternalBlocks ? fullText : stripInternalBlocks(fullText);
-  updateEditorText(displayText);
+  if (updateSource) {
+    const fullText = `${mermaidText}\n${buildInternalBlocksText(state.model.rawBlocks || [])}\n`;
+    const displayText = state.showInternalBlocks ? fullText : stripInternalBlocks(fullText);
+    updateEditorText(displayText);
+  }
   updateInternalToggleVisibility();
   renderLists();
   renderPropPanel();
   renderMermaid(mermaidText, { expectedRev: rev });
-  state.textDirty = false;
-  setOutOfSync(false);
+  if (updateSource) {
+    state.textDirty = false;
+    setOutOfSync(false);
+  }
   if (!preserveWarnings) state.parseWarnings = [];
   if (!preserveWarnings) {
     state.problems = [];
     renderProblems();
   }
-  updateApplyButton();
+  if (updateSource) updateApplyButton();
 }
 
 async function renderFromText({ live = false } = {}) {
@@ -1934,10 +2252,11 @@ async function renderFromText({ live = false } = {}) {
   if (embedded) {
     normalizeModelClassNames(embedded);
     state.model = embedded;
+    const previewText = generateMermaid(state.model, state.pack, state.theme);
     renderLists();
     renderPropPanel();
     updateInternalToggleVisibility();
-    await renderMermaid(text, { expectedRev: rev });
+    await renderMermaid(previewText, { expectedRev: rev });
     if (!isLatestRev(rev)) return false;
     state.textDirty = false;
     updateApplyButton();
@@ -1975,7 +2294,8 @@ async function renderFromText({ live = false } = {}) {
   updateInternalToggleVisibility();
   renderLists();
   renderPropPanel();
-  await renderMermaid(text, { expectedRev: rev });
+  const previewText = generateMermaid(state.model, state.pack, state.theme);
+  await renderMermaid(previewText, { expectedRev: rev });
   if (!isLatestRev(rev)) return false;
   state.textDirty = false;
   updateApplyButton();
@@ -2040,6 +2360,7 @@ function applyNodePositions(svg) {
   for (const g of nodes) {
     const id = getNodeIdFromGroup(g);
     if (!id) continue;
+    g.dataset.aeNodeId = id;
     mapped += 1;
     const modelNode = state.model.nodes.find((n) => n.id === id);
     const base = parseTranslate(g.getAttribute("transform"));
@@ -2132,7 +2453,6 @@ function clientToSvg(svg, clientX, clientY) {
 
 function applyConnectHandles(svg) {
   svg.querySelectorAll("circle.ae-handle").forEach((n) => n.remove());
-  svg.querySelectorAll("line.ae-temp-edge").forEach((n) => n.remove());
   if (!state.connectMode) return;
   const nodes = svg.querySelectorAll("g.node");
   for (const g of nodes) {
@@ -2153,6 +2473,9 @@ function applyConnectHandles(svg) {
       c.setAttribute("cy", String(p.y));
       c.dataset.nodeId = id;
       c.dataset.side = p.side;
+      if (state.connectFromNodeId && state.connectFromNodeId === id) {
+        c.classList.add("ae-handle-src");
+      }
       g.appendChild(c);
     }
   }
@@ -2771,8 +3094,13 @@ function attachNodeInteractions(svg) {
     });
   }
 
-  const edgePaths = svg.querySelectorAll("g.edgePath");
+  const edgePathGroups = Array.from(svg.querySelectorAll("g.edgePath"));
+  const edgePathFallback = Array.from(svg.querySelectorAll("path[id^='L-']"));
+  const edgePaths = edgePathGroups.length ? edgePathGroups : edgePathFallback;
   const edgeLabels = svg.querySelectorAll("g.edgeLabel");
+  const edgePathMap = new Map();
+  const edgeLabelMap = new Map();
+  const mappedEdgeIds = new Set();
   const candidatesByKey = new Map();
   for (const edge of state.model.edges) {
     const key = `${edge.from}|${edge.to}|${edge.label || ""}`;
@@ -2786,12 +3114,13 @@ function attachNodeInteractions(svg) {
     if (!candidatesByPair.has(key)) candidatesByPair.set(key, []);
     candidatesByPair.get(key).push(edge);
   }
+  const pairCursor = new Map();
 
   const parseEdgeSignature = (g, idx) => {
     let from = null;
     let to = null;
     let label = "";
-    const title = g.querySelector("title")?.textContent || "";
+    const title = g.querySelector?.("title")?.textContent || "";
     const mLabel = title.match(/^(.+?)\s*[-.=]+>.*?\|(.+?)\|\s*(.+)$/);
     if (mLabel) {
       from = mLabel[1].trim();
@@ -2808,7 +3137,7 @@ function attachNodeInteractions(svg) {
       const t = edgeLabels[idx].querySelector("text");
       if (t && t.textContent) label = t.textContent.trim();
     }
-    if (!from || !to) {
+    if ((!from || !to) && g.getAttribute) {
       const id = g.getAttribute("id") || "";
       const idMatch = id.match(/^L-([^\\-]+)-([^\\-]+)/);
       if (idMatch) {
@@ -2819,20 +3148,81 @@ function attachNodeInteractions(svg) {
     return { from, to, label };
   };
 
+  const openEdgeLabelEditor = async (edgeId) => {
+    const edge = edgeId ? state.model.edges.find((e) => e.id === edgeId) : null;
+    if (!edge) return;
+    const next = await requestTextInput("Edge label", edge.label || "");
+    if (next == null) return;
+    edge.label = next;
+    selectEdgeById(edge.id);
+    renderFromModel();
+    pushHistory();
+    markModelDirty("edge label changed");
+  };
+
   edgePaths.forEach((g, idx) => {
     const sig = parseEdgeSignature(g, idx);
     let edge = null;
+    const rawId = g.getAttribute?.("id") || "";
+    const idPair = rawId.match(/^L-([^\\-]+)-([^\\-]+)/);
+    if (idPair) {
+      const pairKey = `${idPair[1]}|${idPair[2]}`;
+      const pair = candidatesByPair.get(pairKey) || [];
+      if (pair.length === 1) {
+        edge = pair[0];
+      } else if (pair.length > 1) {
+        const cursor = pairCursor.get(pairKey) || 0;
+        edge = pair[Math.min(cursor, pair.length - 1)] || null;
+        pairCursor.set(pairKey, cursor + 1);
+      }
+    }
     if (sig.from && sig.to) {
       const key = `${sig.from}|${sig.to}|${sig.label || ""}`;
       const exact = candidatesByKey.get(key) || [];
       if (exact.length === 1) edge = exact[0];
       if (!edge) {
-        const pair = candidatesByPair.get(`${sig.from}|${sig.to}`) || [];
-        if (pair.length === 1) edge = pair[0];
+        const pairKey = `${sig.from}|${sig.to}`;
+        const pair = candidatesByPair.get(pairKey) || [];
+        if (pair.length === 1) {
+          edge = pair[0];
+        } else if (pair.length > 1) {
+          const cursor = pairCursor.get(pairKey) || 0;
+          edge = pair[Math.min(cursor, pair.length - 1)] || null;
+          pairCursor.set(pairKey, cursor + 1);
+        }
       }
     }
+    if (!edge && state.model.edges[idx] && !mappedEdgeIds.has(state.model.edges[idx].id)) {
+      edge = state.model.edges[idx];
+    }
+    if (!edge) {
+      edge = state.model.edges.find((e) => !mappedEdgeIds.has(e.id)) || null;
+    }
     if (edge) {
+      mappedEdgeIds.add(edge.id);
       g.dataset.aeEdgeId = edge.id;
+      g.querySelectorAll?.("*").forEach((el) => {
+        el.dataset.aeEdgeId = edge.id;
+      });
+      edgePathMap.set(edge.id, g);
+      const labelG = edgeLabels[idx];
+      if (labelG) {
+        labelG.dataset.aeEdgeId = edge.id;
+        labelG.querySelectorAll("*").forEach((el) => {
+          el.dataset.aeEdgeId = edge.id;
+        });
+        edgeLabelMap.set(edge.id, labelG);
+        labelG.addEventListener("dblclick", (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          void openEdgeLabelEditor(edge.id);
+        });
+      }
+      g.addEventListener("dblclick", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        void openEdgeLabelEditor(edge.id);
+      });
     } else {
       g.dataset.aeEdgeAmbiguous = "1";
     }
@@ -2868,10 +3258,179 @@ function attachNodeInteractions(svg) {
     });
   });
 
+  const resolveEdgeIdFromEvent = (evt) => {
+    const path = typeof evt.composedPath === "function" ? evt.composedPath() : [];
+    for (const node of path) {
+      if (!node || node === svg || !node.dataset) continue;
+      if (node.dataset.aeEdgeId) return node.dataset.aeEdgeId;
+      if (node.getAttribute) {
+        const rawId = node.getAttribute("id") || "";
+        const m = rawId.match(/^L-([^\\-]+)-([^\\-]+)/);
+        if (m) {
+          const hit = state.model.edges.find((e) => e.from === m[1] && e.to === m[2]);
+          if (hit) return hit.id;
+        }
+      }
+    }
+    const host = evt.target?.closest?.("g.edgePath, g.edgeLabel");
+    return host?.dataset?.aeEdgeId || null;
+  };
+
+  svg.addEventListener("dblclick", (evt) => {
+    const edgeId = resolveEdgeIdFromEvent(evt);
+    if (!edgeId) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    void openEdgeLabelEditor(edgeId);
+  });
+
   let dragNode = null;
   const DRAG_THRESHOLD_PX = 2;
+  let dragOverlayLines = [];
+  const liveMutatedPaths = new Map();
+  const liveMutatedLabels = new Map();
+  const getNodeCenter = (nodeId) => {
+    const nodeGroup = Array.from(svg.querySelectorAll("g.node")).find((x) => getNodeIdFromGroup(x) === nodeId);
+    if (!nodeGroup) return null;
+    const box = nodeGroup.getBBox();
+    const local = svg.createSVGPoint();
+    local.x = box.x + box.width / 2;
+    local.y = box.y + box.height / 2;
+    const ctm = nodeGroup.getCTM();
+    if (!ctm) return null;
+    const global = local.matrixTransform(ctm);
+    return { x: global.x, y: global.y };
+  };
 
-  let connectDrag = null;
+  const clearDragOverlay = () => {
+    for (const line of dragOverlayLines) line.remove();
+    dragOverlayLines = [];
+  };
+
+  const toLocalPoint = (el, pt) => {
+    try {
+      const ctm = el.getCTM();
+      if (!ctm) return pt;
+      const inv = ctm.inverse();
+      const sp = svg.createSVGPoint();
+      sp.x = pt.x;
+      sp.y = pt.y;
+      const lp = sp.matrixTransform(inv);
+      return { x: lp.x, y: lp.y };
+    } catch {
+      return pt;
+    }
+  };
+
+  const setPathDForEndpoints = (pathEl, fromGlobal, toGlobal) => {
+    const lf = toLocalPoint(pathEl, fromGlobal);
+    const lt = toLocalPoint(pathEl, toGlobal);
+    pathEl.setAttribute("transform", "");
+    pathEl.setAttribute("d", `M ${lf.x},${lf.y} L ${lt.x},${lt.y}`);
+  };
+
+  const moveEdgeLabelToPathMid = (edgeId, pathEl, { trackRestore = false } = {}) => {
+    const labelG = edgeLabelMap.get(edgeId);
+    if (!labelG || !pathEl?.getPointAtLength) return;
+    if (trackRestore && !liveMutatedLabels.has(labelG)) {
+      liveMutatedLabels.set(labelG, labelG.getAttribute("transform") || "");
+    }
+    const len = pathEl.getTotalLength();
+    if (!Number.isFinite(len) || len <= 0) return;
+    const mid = pathEl.getPointAtLength(len / 2);
+    const ctm = pathEl.getCTM();
+    if (!ctm) return;
+    const lp = svg.createSVGPoint();
+    lp.x = mid.x;
+    lp.y = mid.y;
+    const global = lp.matrixTransform(ctm);
+    const baseSpace = labelG.parentNode?.getCTM ? labelG.parentNode : labelG;
+    const localMid = toLocalPoint(baseSpace, { x: global.x, y: global.y });
+    labelG.setAttribute("transform", `translate(${localMid.x},${localMid.y})`);
+  };
+
+  const updateConnectedEdgesLive = (nodeId) => {
+    const connected = state.model.edges.filter((e) => e.from === nodeId || e.to === nodeId);
+    for (const edge of connected) {
+      const host = edgePathMap.get(edge.id);
+      if (!host) continue;
+      const from = getNodeCenter(edge.from);
+      const to = getNodeCenter(edge.to);
+      if (!from || !to) continue;
+      const paths =
+        host.tagName?.toLowerCase() === "path" ? [host] : Array.from(host.querySelectorAll("path"));
+      for (const p of paths) {
+        if (!liveMutatedPaths.has(p)) {
+          liveMutatedPaths.set(p, {
+            d: p.getAttribute("d") || "",
+            transform: p.getAttribute("transform") || ""
+          });
+        }
+        setPathDForEndpoints(p, from, to);
+      }
+      if (paths[0]) {
+        moveEdgeLabelToPathMid(edge.id, paths[0], { trackRestore: true });
+      }
+    }
+  };
+
+  const restoreLiveMutations = () => {
+    for (const [p, meta] of liveMutatedPaths.entries()) {
+      if (!p?.isConnected) continue;
+      p.setAttribute("d", meta?.d || "");
+      p.setAttribute("transform", meta?.transform || "");
+    }
+    for (const [g, t] of liveMutatedLabels.entries()) {
+      if (g?.isConnected) g.setAttribute("transform", t || "");
+    }
+    liveMutatedPaths.clear();
+    liveMutatedLabels.clear();
+  };
+
+  const syncPinnedNodeEdges = () => {
+    const pinned = new Set(
+      (state.model.nodes || [])
+        .filter((n) => n?.pinned)
+        .map((n) => n.id)
+    );
+    if (!pinned.size) return;
+    for (const edge of state.model.edges || []) {
+      if (!pinned.has(edge.from) && !pinned.has(edge.to)) continue;
+      const host = edgePathMap.get(edge.id);
+      if (!host) continue;
+      const from = getNodeCenter(edge.from);
+      const to = getNodeCenter(edge.to);
+      if (!from || !to) continue;
+      const paths =
+        host.tagName?.toLowerCase() === "path" ? [host] : Array.from(host.querySelectorAll("path"));
+      for (const p of paths) {
+        setPathDForEndpoints(p, from, to);
+      }
+      if (paths[0]) {
+        moveEdgeLabelToPathMid(edge.id, paths[0], { trackRestore: false });
+      }
+    }
+  };
+  syncPinnedNodeEdges();
+
+  const updateDragOverlay = () => {
+    if (!dragNode?.active) return;
+    clearDragOverlay();
+    const connected = state.model.edges.filter((e) => e.from === dragNode.id || e.to === dragNode.id);
+    for (const edge of connected) {
+      const from = getNodeCenter(edge.from);
+      const to = getNodeCenter(edge.to);
+      if (!from || !to) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "ae-temp-edge");
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y));
+      svg.appendChild(line);
+      dragOverlayLines.push(line);
+    }
+  };
 
   svg.addEventListener("pointerdown", (evt) => {
     if (evt.button !== 0) return;
@@ -2881,20 +3440,34 @@ function attachNodeInteractions(svg) {
       evt.stopPropagation();
       const fromId = handle.dataset.nodeId;
       if (!fromId) return;
-      const pt = clientToSvg(svg, evt.clientX, evt.clientY);
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("class", "ae-temp-edge");
-      line.setAttribute("x1", String(pt.x));
-      line.setAttribute("y1", String(pt.y));
-      line.setAttribute("x2", String(pt.x));
-      line.setAttribute("y2", String(pt.y));
-      svg.appendChild(line);
-      connectDrag = {
-        fromId,
-        line,
-        rewireEdgeId: state.selectedEdgeId || null
-      };
-      handle.setPointerCapture(evt.pointerId);
+      if (!state.connectFromNodeId) {
+        state.connectFromNodeId = fromId;
+        selectNodeById(fromId);
+        applyConnectHandles(svg);
+        return;
+      }
+      if (state.connectFromNodeId === fromId) {
+        state.connectFromNodeId = null;
+        applyConnectHandles(svg);
+        return;
+      }
+      if (state.selectedEdgeId) {
+        const edge = state.model.edges.find((e) => e.id === state.selectedEdgeId);
+        if (edge) {
+          edge.from = state.connectFromNodeId;
+          edge.to = fromId;
+          pushHistory();
+          renderFromModel();
+          markModelDirty("edge rewired");
+        }
+      } else {
+        addEdgeByNodes(state.connectFromNodeId, fromId);
+      }
+      state.connectFromNodeId = null;
+      return;
+    }
+    if (state.connectMode) {
+      // In connect mode, only connector-handle clicks are used for edge creation.
       return;
     }
     const g = evt.target.closest("g.node");
@@ -2929,12 +3502,6 @@ function attachNodeInteractions(svg) {
   });
 
   svg.addEventListener("pointermove", (evt) => {
-    if (connectDrag) {
-      const pt = clientToSvg(svg, evt.clientX, evt.clientY);
-      connectDrag.line.setAttribute("x2", String(pt.x));
-      connectDrag.line.setAttribute("y2", String(pt.y));
-      return;
-    }
     if (!dragNode) return;
     if (evt.pointerId !== dragNode.pointerId) return;
     dragNode.lastClientX = evt.clientX;
@@ -2958,38 +3525,11 @@ function attachNodeInteractions(svg) {
     const next = { x: targetX - dragNode.baseX, y: targetY - dragNode.baseY };
     setPinnedOffset(dragNode.node, next);
     setNodeTransform(dragNode.g, targetX, targetY);
+    updateConnectedEdgesLive(dragNode.id);
+    updateDragOverlay();
   });
 
   svg.addEventListener("pointerup", (evt) => {
-    if (connectDrag) {
-      const line = connectDrag.line;
-      if (line) line.remove();
-      const el = document.elementFromPoint(evt.clientX, evt.clientY);
-      const g = el ? el.closest("g.node") : null;
-      const toId = g ? getNodeIdFromElement(g) : null;
-      if (toId && toId !== connectDrag.fromId) {
-        if (connectDrag.rewireEdgeId) {
-          const edge = state.model.edges.find((e) => e.id === connectDrag.rewireEdgeId);
-          if (edge) {
-            edge.from = connectDrag.fromId;
-            edge.to = toId;
-            pushHistory();
-            renderFromModel();
-            markModelDirty("edge rewired");
-          }
-        } else {
-          const ids = new Set(state.model.edges.map((e) => e.id));
-          const id = nextId("E", ids);
-          const kind = Object.keys(state.pack.edgeKinds || {})[0] || "http";
-          state.model.edges.push({ id, from: connectDrag.fromId, to: toId, kind, label: "" });
-          pushHistory();
-          renderFromModel();
-          markModelDirty("edge added");
-        }
-      }
-      connectDrag = null;
-      return;
-    }
     if (!dragNode) return;
     if (evt.pointerId !== dragNode.pointerId) return;
     const id = dragNode.id;
@@ -3005,11 +3545,25 @@ function attachNodeInteractions(svg) {
       devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
       selectNodeById(id);
       pushHistory();
-      renderFromModel();
+      restoreLiveMutations();
+      clearDragOverlay();
+      renderFromModel({ updateSource: true, preserveWarnings: true });
       markModelDirty("node position changed");
       return;
     }
+    clearDragOverlay();
+    restoreLiveMutations();
     dragNode.g.releasePointerCapture(evt.pointerId);
+    dragNode = null;
+  });
+
+  svg.addEventListener("pointercancel", (evt) => {
+    if (!dragNode || evt.pointerId !== dragNode.pointerId) return;
+    clearDragOverlay();
+    restoreLiveMutations();
+    try {
+      dragNode.g.releasePointerCapture(evt.pointerId);
+    } catch {}
     dragNode = null;
   });
 }
@@ -3236,9 +3790,8 @@ function wireToolbar() {
   });
 
   els.btnRelayout.addEventListener("click", () => {
-    // Re-layout should keep pinned offsets by default.
-    // (Reset pins can be introduced as a separate action.)
-    renderFromModel();
+    // Re-layout: preview only (do not rewrite source text).
+    renderFromModel({ updateSource: false });
     markModelDirty("re-layout requested");
   });
 
@@ -3397,9 +3950,10 @@ function wireToolbar() {
     const themeId = els.selTheme.value;
     const theme = state.themes.find((t) => t.themeId === themeId) || state.themes[0];
     state.theme = theme;
+    applyThemeVars(theme);
     initMermaidBase(theme).catch(showError);
     if (state.model) state.model.themeId = themeId;
-    renderFromModel();
+    renderFromModel({ updateSource: false, preserveWarnings: true });
   });
 
   els.selDir.addEventListener("change", () => {
@@ -4003,13 +4557,8 @@ function wireModelControls() {
     const kind = els.selEdgeKind.value;
     if (!from || !to || !kind) return;
     const label = (els.txtEdgeLabel.value || "").trim();
-    const ids = new Set(state.model.edges.map((e) => e.id));
-    const id = nextId("E", ids);
-    state.model.edges.push({ id, from, to, kind, label });
+    addEdgeByNodes(from, to, { kind, label });
     els.txtEdgeLabel.value = "";
-    pushHistory();
-    renderFromModel();
-    markModelDirty("edge added");
   });
 }
 
@@ -4034,6 +4583,11 @@ function wireKeys() {
       if (state.selectedNodeId) centerOnSelected();
     }
     if (key === "escape") {
+      if (state.connectFromNodeId) {
+        state.connectFromNodeId = null;
+        const svg = els.preview.querySelector("svg");
+        if (svg) applyConnectHandles(svg);
+      }
       state.selectedNodeId = null;
       state.selectedEdgeId = null;
       renderPropPanel();
@@ -4113,7 +4667,7 @@ function getModelJsonText() {
   return JSON.stringify(model, null, 2);
 }
 
-async function svgToPng(svgText) {
+async function svgToPng(svgText, { scale = 1 } = {}) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgText, "image/svg+xml");
   const svgEl = doc.documentElement;
@@ -4145,12 +4699,13 @@ async function svgToPng(svgText) {
   });
 
   const dpr = window.devicePixelRatio || 1;
+  const factor = Math.max(1, Number(scale) || 1);
   const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(width * dpr);
-  canvas.height = Math.ceil(height * dpr);
+  canvas.width = Math.ceil(width * dpr * factor);
+  canvas.height = Math.ceil(height * dpr * factor);
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(dpr * factor, 0, 0, dpr * factor, 0, 0);
   ctx.drawImage(img, 0, 0, width, height);
   URL.revokeObjectURL(url);
   return canvas.toDataURL("image/png");
@@ -4193,12 +4748,14 @@ async function boot() {
     showWarning("Theme load failed. Using fallback theme.");
   }
   state.theme = state.themes.find((t) => t.themeId === "infra-dark") || state.themes[0] || getFallbackTheme();
+  applyThemeVars(state.theme);
   try {
     await initMermaidBase(state.theme);
   } catch (err) {
     console.error("[boot] mermaid init failed:", err);
     showWarning("Mermaid init failed. Retrying with fallback theme.");
     state.theme = getFallbackTheme();
+    applyThemeVars(state.theme);
     await initMermaidBase(state.theme);
   }
 
@@ -4280,8 +4837,10 @@ async function boot() {
   }
   if (els.inspectorBody) els.inspectorBody.textContent = "Select a node/edge to edit";
   setInspectorHeader("Inspector", "Select", "muted");
+  await refreshEntitlements("boot");
 
   wireToolbar();
+  wireProDialog();
   wireNativeMenuActions();
   wireModelControls();
   wirePreviewZoom();
@@ -4303,8 +4862,14 @@ async function boot() {
     localStorage.setItem(firstRunKey, "1");
   } else {
     try {
-      renderFromModel();
-      pushHistory();
+      if (isModelEmpty(state.model)) {
+        const sample = buildSampleMermaid();
+        updateEditorText(sample);
+        await renderFromText({ live: false });
+      } else {
+        renderFromModel();
+        pushHistory();
+      }
     } catch (err) {
       console.error("[boot] renderFromModel failed. Falling back to sample:", err);
       showWarning("Startup model restore failed. Loaded sample instead.");

@@ -1,0 +1,84 @@
+{
+  "packId": "hybrid-infra",
+  "name": "Hybrid Infra",
+  "roles": {
+    "client": {
+      "label": "Client",
+      "idPrefix": "CL",
+      "shape": "round",
+      "className": "role-client"
+    },
+    "vpn_gateway": {
+      "label": "VPN GW",
+      "idPrefix": "VPN",
+      "shape": "diamond",
+      "className": "role-vpn"
+    },
+    "firewall": {
+      "label": "Firewall",
+      "idPrefix": "FW",
+      "shape": "hex",
+      "className": "role-firewall"
+    },
+    "alb": {
+      "label": "ALB",
+      "idPrefix": "ALB",
+      "shape": "parallelogram",
+      "className": "role-alb"
+    },
+    "app": {
+      "label": "App",
+      "idPrefix": "APP",
+      "shape": "rect",
+      "className": "role-app"
+    },
+    "rds": {
+      "label": "RDS",
+      "idPrefix": "DB",
+      "shape": "cylinder",
+      "className": "role-rds"
+    },
+    "tunnel": {
+      "label": "Tunnel",
+      "idPrefix": "TN",
+      "shape": "circle",
+      "className": "role-tunnel"
+    }
+  },
+  "boundaryRoles": {
+    "onprem": {
+      "label": "On-Prem",
+      "className": "boundary-onprem"
+    },
+    "cloud": {
+      "label": "Cloud",
+      "className": "boundary-cloud"
+    },
+    "dmz": {
+      "label": "DMZ",
+      "className": "boundary-dmz"
+    }
+  },
+  "edgeKinds": {
+    "http": {
+      "label": "HTTP",
+      "arrow": "-->",
+      "className": "edge-http"
+    },
+    "https": {
+      "label": "HTTPS",
+      "arrow": "==>",
+      "className": "edge-https"
+    },
+    "ipsec": {
+      "label": "IPsec",
+      "arrow": "-.->",
+      "className": "edge-ipsec"
+    },
+    "tunnel": {
+      "label": "Tunnel",
+      "arrow": "-..->",
+      "className": "edge-tunnel"
+    }
+  }
+}

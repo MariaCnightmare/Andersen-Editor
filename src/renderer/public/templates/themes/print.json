@@ -1,0 +1,67 @@
+{
+  "themeId": "print",
+  "name": "Print",
+  "mode": "light",
+  "init": {
+    "theme": "neutral",
+    "flowchart": {
+      "curve": "linear"
+    }
+  },
+  "vars": {
+    "--surface-0": "#ffffff",
+    "--surface-1": "#ffffff",
+    "--surface-2": "#ffffff",
+    "--panel": "#ffffff",
+    "--panel2": "#ffffff",
+    "--text": "#111111",
+    "--text-1": "#111111",
+    "--text-2": "#333333",
+    "--text-3": "#555555",
+    "--muted": "#555555",
+    "--border": "rgba(17,17,17,.35)",
+    "--border-1": "rgba(17,17,17,.35)",
+    "--border-2": "rgba(17,17,17,.50)",
+    "--border-3": "rgba(17,17,17,.75)",
+    "--accent": "#111111",
+    "--accent-1": "#111111",
+    "--accent2": "#111111",
+    "--btn": "#ffffff",
+    "--btnHover": "#f2f2f2",
+    "--input": "#ffffff",
+    "--danger": "#111111",
+    "--ok": "#111111",
+    "--shadow-1": "none",
+    "--shadow-2": "none",
+    "--t-fast": "120ms"
+  },
+  "classDefs": {
+    "role-client": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-internet": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-server": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-app": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-lb": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-db": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-vpn": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-fw": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-router": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "role-external": "fill:#ffffff,stroke:#111111,stroke-width:2px,color:#111111",
+    "accent-blue": "fill:#ffffff,stroke:#245bdb,stroke-width:2px,color:#111111",
+    "accent-green": "fill:#ffffff,stroke:#0a8a53,stroke-width:2px,color:#111111",
+    "accent-amber": "fill:#ffffff,stroke:#b07b00,stroke-width:2px,color:#111111",
+    "accent-red": "fill:#ffffff,stroke:#d33a3a,stroke-width:2px,color:#111111"
+  },
+  "boundaryStyles": {
+    "boundary-onprem": "fill:transparent,stroke:#111111,stroke-width:1px,stroke-dasharray:4 4,color:#111111",
+    "boundary-vpc": "fill:transparent,stroke:#111111,stroke-width:1px,stroke-dasharray:4 4,color:#111111",
+    "boundary-subnet": "fill:transparent,stroke:#111111,stroke-width:1px,stroke-dasharray:4 4,color:#111111",
+    "boundary-dmz": "fill:transparent,stroke:#111111,stroke-width:1px,stroke-dasharray:4 4,color:#111111"
+  },
+  "edgeStyles": {
+    "edge-http": "stroke:#111111,stroke-width:2px",
+    "edge-sql": "stroke:#111111,stroke-width:2px",
+    "edge-dep": "stroke:#111111,stroke-width:2px,stroke-dasharray:4 4",
+    "edge-opt": "stroke:#111111,stroke-width:1px,stroke-dasharray:2 6",
+    "edge-tunnel": "stroke:#111111,stroke-width:4px,stroke-dasharray:6 4"
+  }
+}
