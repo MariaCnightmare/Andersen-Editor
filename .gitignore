@@ -14,3 +14,8 @@ src/renderer/public/vendor/
 # temp / work dirs
 _nested_repo_Andersen-Editor_*/
 
+
+# build artifacts
+build/
+release/
+
