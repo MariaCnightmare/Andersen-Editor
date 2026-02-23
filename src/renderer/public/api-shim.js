@@ -83,6 +83,13 @@
     }
   };
 
-  window.api = { readAssetText, readAssetJson };
+  const openExternalUrl = async ({ url } = {}) => {
+    const next = String(url || "").trim();
+    if (!next) return { ok: false, error: "url is empty." };
+    window.open(next, "_blank", "noopener,noreferrer");
+    return { ok: true };
+  };
+
+  window.api = { readAssetText, readAssetJson, openExternalUrl };
   console.info("[api-shim] installed window.api.readAssetText/readAssetJson");
 })();

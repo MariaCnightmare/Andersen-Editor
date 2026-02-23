@@ -41,9 +41,11 @@ contextBridge.exposeInMainWorld("api", {
   exportWritePdfFile: (args) => ipcRenderer.invoke("export:writePdfFile", args),
   exportWriteModelJsonFile: (args) => ipcRenderer.invoke("export:writeModelJsonFile", args),
   showItemInFolder: (args) => ipcRenderer.invoke("shell:showItemInFolder", args),
+  openExternalUrl: (args) => ipcRenderer.invoke("shell:openExternalUrl", args),
   entitlementsGetStatus: () => ipcRenderer.invoke("entitlements:getStatus"),
   entitlementsPurchasePro: () => ipcRenderer.invoke("entitlements:purchasePro"),
   entitlementsRestore: () => ipcRenderer.invoke("entitlements:restore"),
+  getAppVersion: () => ipcRenderer.invoke("app:getVersion"),
 
   getDiagnostics: () => ipcRenderer.invoke("diag:getInfo"),
   getGpuStatus: () => ipcRenderer.invoke("diag:getGpuStatus"),

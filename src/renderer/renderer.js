@@ -1,4 +1,5 @@
 import { createInitialModel, normalizeModel, clone } from "../core/model.js";
+import { createBlankModel } from "../core/presets.js";
 import { normalizeNodeClassName, slugifyClassName } from "../core/className.mjs";
 import { generateMermaid } from "../core/generateMermaid.js";
 import { extractModelFromText, embedModelComment } from "../core/codec.js";
@@ -9,8 +10,13 @@ import {
   resolveUiZoomFactor,
   isEditableTarget,
   prepareContentForSave,
-  stripInternalBlocks
+  stripInternalBlocks,
+  autoWrapLabel,
+  alignRects,
+  distributeRects,
+  pickUnlockedIds
 } from "./editorUtils.mjs";
+import { t, setLanguage, applyLanguage } from "./i18n.js";
 
 console.log("[boot] renderer.js loaded", document.readyState);
 try {
@@ -23,6 +29,8 @@ const $ = (id) => document.getElementById(id);
 const PRO_CAP_EXPORT_PDF = "export.pdf";
 const PRO_CAP_EXPORT_PNG_HIGHRES = "export.png.highres";
 const PRO_CAP_EXPORT_MODEL_JSON = "export.modelJson";
+const ONBOARDING_SEEN_KEY = "ae:onboardingSeen";
+const SUPPORT_URL = "https://github.com/MariaCnightmare/Andersen-Editor/issues";
 
 const state = {
   pack: null,
@@ -39,6 +47,7 @@ const state = {
   panY: 0,
   panSpeed: 2,
   selectedNodeId: null,
+  selectedNodeIds: new Set(),
   selectedEdgeId: null,
   hoverNodeId: null,
   hoverEdgeId: null,
@@ -70,13 +79,15 @@ const state = {
   statusDetailsOpen: false,
   lastAutoScaleKey: "",
   appliedThemeVarKeys: [],
-  entitlements: null
+  entitlements: null,
+  pendingAutoFit: false
 };
 
 const els = {
   preview: $("preview"),
-  statusWrap: document.querySelector(".status"),
+  statusWrap: $("statusWrap"),
   statusText: $("statusText"),
+  proPlanText: $("proPlanText"),
   btnStatusDetails: $("btnStatusDetails"),
   statusMetaWrap: $("statusMetaWrap"),
   statusDpr: $("statusDpr"),
@@ -94,6 +105,8 @@ const els = {
   taskProgressBar: $("taskProgressBar"),
   taskProgressLabel: $("taskProgressLabel"),
   fileInfo: $("fileInfo"),
+  appVersion: $("appVersion"),
+  btnReportBug: $("btnReportBug"),
   zoomText: $("zoomText"),
   srcEditor: $("srcEditor"),
   srcTextarea: $("src"),
@@ -112,6 +125,7 @@ const els = {
   toast: $("toast"),
   layout: $("layout"),
   selTheme: $("selTheme"),
+  selLanguage: $("selLanguage"),
   selDir: $("selDir"),
   selMode: $("selMode"),
   selUiScale: $("selUiScale"),
@@ -126,6 +140,8 @@ const els = {
   edgeList: $("edgeList"),
   boundaryList: $("boundaryList"),
   btnNew: $("btnNew"),
+  btnClearAll: $("btnClearAll"),
+  btnClearAllTop: $("btnClearAllTop"),
   btnOpen: $("btnOpen"),
   btnSave: $("btnSave"),
   btnSaveAs: $("btnSaveAs"),
@@ -153,6 +169,8 @@ const els = {
   btnRedo: $("btnRedo"),
   btnFormat: $("btnFormat"),
   btnRelayout: $("btnRelayout"),
+  btnGroup: $("btnGroup"),
+  btnEqualize: $("btnEqualize"),
   btnConnect: $("btnConnect"),
   btnToggleInspector: $("btnToggleInspector"),
   btnCollapseLeft: $("btnCollapseLeft"),
@@ -161,6 +179,20 @@ const els = {
   btnExpandRight: $("btnExpandRight"),
   btnCopyDiagnostics: $("btnCopyDiagnostics"),
   btnRestoreSnapshot: $("btnRestoreSnapshot"),
+  selectionActions: $("selectionActions"),
+  selectionCount: $("selectionCount"),
+  btnSelectionGroup: $("btnSelectionGroup"),
+  btnSelectionEqualize: $("btnSelectionEqualize"),
+  btnSelectionUngroup: $("btnSelectionUngroup"),
+  btnSelectionAlignL: $("btnSelectionAlignL"),
+  btnSelectionAlignC: $("btnSelectionAlignC"),
+  btnSelectionAlignR: $("btnSelectionAlignR"),
+  btnSelectionAlignT: $("btnSelectionAlignT"),
+  btnSelectionAlignM: $("btnSelectionAlignM"),
+  btnSelectionAlignB: $("btnSelectionAlignB"),
+  btnSelectionDistH: $("btnSelectionDistH"),
+  btnSelectionDistV: $("btnSelectionDistV"),
+  btnSelectionDelete: $("btnSelectionDelete"),
   ctxMenu: $("ctxMenu"),
   textPromptDialog: $("textPromptDialog"),
   textPromptTitle: $("textPromptTitle"),
@@ -188,13 +220,33 @@ const els = {
   btnProClose: $("btnProClose"),
   newDialog: $("newDialog"),
   btnNewCancel: $("btnNewCancel"),
+  tipsDialog: $("tipsDialog"),
+  btnTipsGotIt: $("btnTipsGotIt"),
+  btnShowTips: $("btnShowTips"),
   btnAddNode: $("btnAddNode"),
   btnAddBoundary: $("btnAddBoundary"),
   btnAddEdge: $("btnAddEdge")
 };
 
+function applyLanguageUi(force = false) {
+  return applyLanguage({
+    els,
+    getSelectionCount: () => state.selectedNodeIds.size,
+    setFileInfo,
+    updateProUi,
+    force
+  });
+}
+
 function setStatus(level, msg) {
-  els.statusText.textContent = msg;
+  const statusMap = {
+    ready: "statusReady",
+    dirty: "statusDirty",
+    "out-of-sync": "statusOutOfSync",
+    error: "statusError"
+  };
+  const key = statusMap[String(msg || "")];
+  els.statusText.textContent = key ? t(key) : msg;
   els.statusWrap.classList.toggle("error", level === "error");
   els.statusWrap.classList.toggle("ok", level === "ok");
   els.statusWrap.classList.toggle("dirty", level === "dirty");
@@ -206,7 +258,7 @@ function updateStatusDetailsVisibility() {
   const canShow = !!state.devMode;
   if (els.btnStatusDetails) {
     els.btnStatusDetails.classList.toggle("hidden", !canShow);
-    els.btnStatusDetails.textContent = canShow && state.statusDetailsOpen ? "Hide" : "Details";
+    els.btnStatusDetails.textContent = canShow && state.statusDetailsOpen ? t("detailsHide") : t("details");
   }
   if (els.statusMetaWrap) {
     const open = canShow && !!state.statusDetailsOpen;
@@ -436,7 +488,7 @@ function addCtxGroup(container, label, items) {
 
 function requestTextInput(title, defaultValue = "") {
   if (!els.textPromptDialog || !els.textPromptInput || !els.textPromptTitle) {
-    const picked = window.prompt(title || "Input", defaultValue || "");
+    const picked = window.prompt(title || t("textPromptInput"), defaultValue || "");
     return Promise.resolve(picked == null ? null : String(picked).trim());
   }
   return new Promise((resolve) => {
@@ -463,7 +515,7 @@ function requestTextInput(title, defaultValue = "") {
       }
     };
 
-    els.textPromptTitle.textContent = title || "Input";
+    els.textPromptTitle.textContent = title || t("textPromptInput");
     els.textPromptInput.value = defaultValue || "";
     els.textPromptDialog.classList.remove("hidden");
     setTimeout(() => {
@@ -502,7 +554,7 @@ function showWarning(msg) {
 }
 
 function setFileInfo() {
-  els.fileInfo.textContent = state.filePath ? state.filePath : "未保存";
+  els.fileInfo.textContent = state.filePath ? state.filePath : t("fileInfoUnsaved");
 }
 
 function markModelDirty(reason = "model changed") {
@@ -512,6 +564,12 @@ function markModelDirty(reason = "model changed") {
 
 function clamp(val, min, max) {
   return Math.min(max, Math.max(min, val));
+}
+
+function normalizeProblemsHeight(rawValue) {
+  const n = Number.parseFloat(String(rawValue || "").replace(/px$/i, "").trim());
+  if (!Number.isFinite(n)) return null;
+  return clamp(n, 80, 220);
 }
 
 function clampZoom(z) {
@@ -553,6 +611,21 @@ function applyZoom() {
   localStorage.setItem("ae:zoom", String(z));
   localStorage.setItem("ae:panX", String(state.panX));
   localStorage.setItem("ae:panY", String(state.panY));
+}
+
+function fitPreviewToView() {
+  const svg = els.preview.querySelector("svg");
+  const wrap = $("previewWrap");
+  if (!svg || !wrap) return false;
+  const box = svg.getBBox();
+  const rect = wrap.getBoundingClientRect();
+  if (!box.width || !box.height || !rect.width || !rect.height) return false;
+  const scale = Math.min(rect.width / box.width, rect.height / box.height);
+  state.zoom = clampZoom(scale * 0.95);
+  state.panX = rect.width / 2 - (box.x + box.width / 2) * state.zoom;
+  state.panY = rect.height / 2 - (box.y + box.height / 2) * state.zoom;
+  applyZoom();
+  return true;
 }
 
 function renderProblems() {
@@ -636,11 +709,25 @@ function setConnectMode(on) {
   if (svg) {
     applyConnectHandles(svg);
   }
+  refreshSelectionActions();
 }
 
 function getPinnedOffset(node) {
   if (!node) return { x: 0, y: 0 };
   return node.pinnedOffset || node.position || { x: 0, y: 0 };
+}
+
+function isNodeLocked(nodeOrId) {
+  if (!nodeOrId) return false;
+  if (typeof nodeOrId === "string") {
+    const n = state.model?.nodes?.find((x) => x.id === nodeOrId);
+    return !!n?.locked;
+  }
+  return !!nodeOrId.locked;
+}
+
+function getUnlockedSelectedNodeIds() {
+  return pickUnlockedIds(state.model?.nodes || [], state.selectedNodeIds);
 }
 
 function setPinnedOffset(node, next) {
@@ -756,19 +843,15 @@ function buildTemplateMermaid(kind) {
   if (kind === "empty") return "flowchart LR\n";
   if (kind === "web3") {
     return `flowchart LR
-  subgraph WEB[Web Tier]
-    U[Users]
-    CDN[CDN]
-  end
-  subgraph APP[App Tier]
-    LB[ALB]
-    AP[App]
-  end
-  subgraph DATA[Data Tier]
-    DB[(DB)]
-    CACHE[(Cache)]
-  end
-  U --> CDN --> LB --> AP
+  U[Users]
+  CDN[CDN]
+  LB[ALB]
+  AP[App]
+  DB[(DB)]
+  CACHE[(Cache)]
+  U --> CDN
+  CDN --> LB
+  LB --> AP
   AP --> DB
   AP --> CACHE
 `;
@@ -790,10 +873,113 @@ function buildTemplateMermaid(kind) {
   }
   if (kind === "simple") {
     return `flowchart LR
-  A[Start] --> B[Process] --> C[End]
+  A([Start])
+  B[Process]
+  C([End])
+  A --> B
+  B --> C
 `;
   }
   return buildSampleMermaid();
+}
+
+function pickRoleId(matcher) {
+  const ids = Object.keys(state.pack?.roles || {});
+  if (!ids.length) return "server";
+  const hit = ids.find((id) => matcher(String(id || "").toLowerCase()));
+  return hit || ids[0];
+}
+
+function buildTemplateModel(kind) {
+  const model = createInitialModel(state.pack?.packId, state.theme?.themeId);
+  model.direction = "LR";
+  const place = (x, y) => ({ x, y });
+  const roleGeneric = pickRoleId(() => false);
+  const roleClient = pickRoleId((id) => id.includes("client") || id.includes("user"));
+  const roleLb = pickRoleId((id) => id.includes("lb") || id.includes("load"));
+  const roleApp = pickRoleId((id) => id.includes("app") || id.includes("web") || id.includes("server"));
+  const roleDb = pickRoleId((id) => id.includes("db") || id.includes("data") || id.includes("rds"));
+  const edgeKind = Object.keys(state.pack?.edgeKinds || {})[0] || "http";
+
+  if (kind === "workflow") {
+    model.direction = "LR";
+    model.nodes = [
+      {
+        id: "W1", label: "Start", role: roleGeneric, shape: "round", className: "accent-green",
+        boundaryId: null, groupId: null, groupName: null, position: place(-240, 0), pinnedOffset: place(-240, 0), pinned: true
+      },
+      {
+        id: "W2", label: "Process", role: roleGeneric, shape: "rect", className: "accent-blue",
+        boundaryId: null, groupId: null, groupName: null, position: place(-80, 0), pinnedOffset: place(-80, 0), pinned: true
+      },
+      {
+        id: "W3", label: "Decision", role: roleGeneric, shape: "diamond", className: "accent-amber",
+        boundaryId: null, groupId: null, groupName: null, position: place(80, 0), pinnedOffset: place(80, 0), pinned: true
+      },
+      {
+        id: "W4", label: "End", role: roleGeneric, shape: "round", className: "accent-green",
+        boundaryId: null, groupId: null, groupName: null, position: place(240, 0), pinnedOffset: place(240, 0), pinned: true
+      }
+    ];
+    model.edges = [
+      { id: "E1", from: "W1", to: "W2", kind: edgeKind, label: "" },
+      { id: "E2", from: "W2", to: "W3", kind: edgeKind, label: "" },
+      { id: "E3", from: "W3", to: "W4", kind: edgeKind, label: "" }
+    ];
+    return model;
+  }
+
+  if (kind === "org") {
+    model.direction = "TB";
+    model.nodes = [
+      {
+        id: "O1", label: "CEO", role: roleGeneric, shape: "round", className: "accent-blue",
+        boundaryId: null, groupId: null, groupName: null, position: place(0, -180), pinnedOffset: place(0, -180), pinned: true
+      },
+      {
+        id: "O2", label: "Manager", role: roleGeneric, shape: "rect", className: "accent-green",
+        boundaryId: null, groupId: null, groupName: null, position: place(0, 0), pinnedOffset: place(0, 0), pinned: true
+      },
+      {
+        id: "O3", label: "Member", role: roleGeneric, shape: "rect", className: "accent-amber",
+        boundaryId: null, groupId: null, groupName: null, position: place(0, 180), pinnedOffset: place(0, 180), pinned: true
+      }
+    ];
+    model.edges = [
+      { id: "E1", from: "O1", to: "O2", kind: edgeKind, label: "" },
+      { id: "E2", from: "O2", to: "O3", kind: edgeKind, label: "" }
+    ];
+    return model;
+  }
+
+  if (kind === "infra") {
+    model.nodes = [
+      {
+        id: "I1", label: "Client", role: roleClient, shape: "round", className: "accent-blue",
+        boundaryId: null, groupId: null, groupName: null, position: place(-270, 0), pinnedOffset: place(-270, 0), pinned: true
+      },
+      {
+        id: "I2", label: "LB", role: roleLb, shape: "hex", className: "accent-green",
+        boundaryId: null, groupId: null, groupName: null, position: place(-90, 0), pinnedOffset: place(-90, 0), pinned: true
+      },
+      {
+        id: "I3", label: "App", role: roleApp, shape: "rect", className: "accent-amber",
+        boundaryId: null, groupId: null, groupName: null, position: place(90, 0), pinnedOffset: place(90, 0), pinned: true
+      },
+      {
+        id: "I4", label: "DB", role: roleDb, shape: "cylinder", className: "accent-red",
+        boundaryId: null, groupId: null, groupName: null, position: place(270, 0), pinnedOffset: place(270, 0), pinned: true
+      }
+    ];
+    model.edges = [
+      { id: "E1", from: "I1", to: "I2", kind: edgeKind, label: "" },
+      { id: "E2", from: "I2", to: "I3", kind: edgeKind, label: "" },
+      { id: "E3", from: "I3", to: "I4", kind: edgeKind, label: "" }
+    ];
+    return model;
+  }
+
+  return null;
 }
 
 function isModelEmpty(model) {
@@ -803,6 +989,79 @@ function isModelEmpty(model) {
     (!Array.isArray(model.boundaries) || model.boundaries.length === 0) &&
     (!Array.isArray(model.rawBlocks) || model.rawBlocks.length === 0)
   );
+}
+
+function applyBlankState({ resetFilePath = true } = {}) {
+  state.model = createBlankModel(state.pack?.packId, state.theme?.themeId);
+  if (els.selDir) els.selDir.value = state.model.direction || "TB";
+  state.selectedNodeId = null;
+  state.selectedNodeIds.clear();
+  state.selectedEdgeId = null;
+  state.hoverNodeId = null;
+  state.hoverEdgeId = null;
+  state.connectFromNodeId = null;
+  state.edgeAmbiguous = null;
+  state.prevRawBlocks = null;
+  state.parseWarnings = [];
+  state.problems = [];
+  state.textDirty = false;
+  setOutOfSync(false);
+  renderFromModel();
+  updateApplyButton();
+  clearError();
+  if (resetFilePath) {
+    state.filePath = null;
+    setFileInfo();
+  }
+  setStatus("ok", "ready");
+}
+
+function sanitizeFreeBoxLabel(value) {
+  return String(value || "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\[\]/g, "［］")
+    .replace(/\[/g, "［")
+    .replace(/\]/g, "］")
+    .replace(/-\.-?>/g, "→")
+    .replace(/==>/g, "⇒")
+    .replace(/-->/g, "→")
+    .replace(/->/g, "→")
+    .replace(/<--/g, "←")
+    .replace(/<-/g, "←")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function refreshAppVersion() {
+  if (!els.appVersion) return;
+  try {
+    const res = await window.api?.getAppVersion?.();
+    if (res?.ok && res.version) {
+      els.appVersion.textContent = `v${res.version}`;
+      return;
+    }
+  } catch {}
+  els.appVersion.textContent = "vdev";
+}
+
+function openTipsDialog({ persistSeen = false } = {}) {
+  if (!els.tipsDialog) return;
+  if (persistSeen) {
+    try {
+      localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
+    } catch {}
+  }
+  els.tipsDialog.classList.remove("hidden");
+}
+
+function closeTipsDialog({ persistSeen = true } = {}) {
+  if (!els.tipsDialog) return;
+  if (persistSeen) {
+    try {
+      localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
+    } catch {}
+  }
+  els.tipsDialog.classList.add("hidden");
 }
 
 function getFallbackPack() {
@@ -957,12 +1216,13 @@ function setProDialogError(message) {
 function updateProUi() {
   const isPro = !!state.entitlements?.isPro;
   const source = state.entitlements?.source || "free-default";
+  const plan = isPro ? t("planPro") : t("planFree");
+  if (els.proPlanText) els.proPlanText.textContent = plan;
   if (els.btnProUnlock) {
-    els.btnProUnlock.textContent = isPro ? "Pro" : "Free";
-    els.btnProUnlock.title = isPro ? `Pro unlocked (${source})` : "Free plan";
+    els.btnProUnlock.title = isPro ? t("proPlanTitleUnlocked", { source }) : t("proPlanTitleFree");
   }
   if (els.proStatusText) {
-    els.proStatusText.textContent = `Status: ${isPro ? "Pro" : "Free"} (${source})`;
+    els.proStatusText.textContent = t("proStatusLine", { plan, source });
   }
   const lockPdf = !hasCapability(PRO_CAP_EXPORT_PDF);
   const lockModel = !hasCapability(PRO_CAP_EXPORT_MODEL_JSON);
@@ -1751,7 +2011,7 @@ function applyInspectorVisibility() {
   document.body.classList.toggle("inspector-hidden", !state.inspectorVisible);
   if (els.btnToggleInspector) {
     els.btnToggleInspector.classList.toggle("active", state.inspectorVisible);
-    els.btnToggleInspector.textContent = state.inspectorVisible ? "Inspector ON" : "Inspector OFF";
+    els.btnToggleInspector.textContent = state.inspectorVisible ? t("btnInspectorOn") : t("btnInspectorOff");
   }
 }
 
@@ -1795,6 +2055,10 @@ function addEdgeByNodes(from, to, { kind = null, label = "" } = {}) {
 
 function refreshSelectors() {
   els.selRole.innerHTML = "";
+  const freeOpt = document.createElement("option");
+  freeOpt.value = "__free_box__";
+  freeOpt.textContent = "Free Box（自由記入）";
+  els.selRole.appendChild(freeOpt);
   for (const [roleId, role] of Object.entries(state.pack.roles)) {
     const opt = document.createElement("option");
     opt.value = roleId;
@@ -1854,7 +2118,11 @@ function highlightList() {
   };
   reset(els.nodeList);
   reset(els.edgeList);
-  mark(els.nodeList, state.selectedNodeId, "active");
+  if (state.selectedNodeIds.size) {
+    for (const id of state.selectedNodeIds) mark(els.nodeList, id, "active");
+  } else {
+    mark(els.nodeList, state.selectedNodeId, "active");
+  }
   mark(els.nodeList, state.hoverNodeId, "hover");
   mark(els.edgeList, state.selectedEdgeId, "active");
   mark(els.edgeList, state.hoverEdgeId, "hover");
@@ -1873,20 +2141,39 @@ function renderLists() {
   const nodeItems = state.model.nodes.map((n) => {
     const div = document.createElement("div");
     div.className = "item";
+    if (n.locked) div.classList.add("locked");
     div.dataset.aeId = n.id;
     div.innerHTML = `<span class="tag">${n.id}</span><span class="name">${n.label}</span><span class="tag">${n.role}</span>`;
     const btn = document.createElement("button");
     btn.className = "btnMini";
     btn.textContent = "削除";
+    btn.disabled = !!n.locked;
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (n.locked) return;
       state.model.nodes = state.model.nodes.filter((x) => x.id !== n.id);
       state.model.edges = state.model.edges.filter((x) => x.from !== n.id && x.to !== n.id);
       pushHistory();
       renderFromModel();
     });
     div.appendChild(btn);
-    div.addEventListener("click", () => {
+    div.addEventListener("click", (evt) => {
+      if (n.locked) return;
+      if (evt.shiftKey && !state.connectMode) {
+        if (state.selectedNodeIds.has(n.id)) {
+          state.selectedNodeIds.delete(n.id);
+        } else {
+          state.selectedNodeIds.add(n.id);
+        }
+        state.selectedNodeId = state.selectedNodeIds.size === 1 ? Array.from(state.selectedNodeIds)[0] : null;
+        state.selectedEdgeId = null;
+        state.edgeAmbiguous = null;
+        renderPropPanel();
+        const svg = els.preview.querySelector("svg");
+        if (svg) applySelection(svg);
+        highlightList();
+        return;
+      }
       selectNodeById(n.id);
       highlightList();
     });
@@ -2070,9 +2357,15 @@ function parseMermaidToModel(text) {
     if (mSub) {
       const id = mSub[1];
       const label = mSub[2] || id;
-      const b = { id, label, role: "vpc" };
+      const b = { id, label, role: "vpc", direction: "TB" };
       boundaries.push(b);
       boundaryStack.push(b);
+      continue;
+    }
+
+    const mSubDirection = trimmed.match(/^direction\s+(TB|TD|BT|LR|RL)$/i);
+    if (mSubDirection && boundaryStack.length) {
+      boundaryStack[boundaryStack.length - 1].direction = mSubDirection[1].toUpperCase();
       continue;
     }
 
@@ -2198,12 +2491,20 @@ function renderFromModel({ preserveWarnings = false, updateSource = true } = {})
   state.model = normalizeModelClassNames(state.model);
   state.model = normalizeModel(clone(state.model));
   state.model.direction = els.selDir.value || state.model.direction;
+  if (state.selectedNodeIds.size) {
+    const validNodeIds = new Set(state.model.nodes.map((n) => n.id));
+    for (const id of Array.from(state.selectedNodeIds)) {
+      if (!validNodeIds.has(id) || isNodeLocked(id)) state.selectedNodeIds.delete(id);
+    }
+    state.selectedNodeId = state.selectedNodeIds.size === 1 ? Array.from(state.selectedNodeIds)[0] : null;
+  }
   if (state.selectedNodeId && !state.model.nodes.find((n) => n.id === state.selectedNodeId)) {
     state.selectedNodeId = null;
   }
   if (state.selectedEdgeId && !state.model.edges.find((e) => e.id === state.selectedEdgeId)) {
     state.selectedEdgeId = null;
   }
+  refreshSelectionActions();
   state.edgeAmbiguous = null;
   const mermaidText = generateMermaid(state.model, state.pack, state.theme);
   const validation = validateMermaidText(mermaidText).filter((x) => x.type === "error");
@@ -2228,6 +2529,8 @@ function renderFromModel({ preserveWarnings = false, updateSource = true } = {})
   if (!preserveWarnings) {
     state.problems = [];
     renderProblems();
+    setStatus("ok", "ready");
+    setStatusReason("");
   }
   if (updateSource) updateApplyButton();
 }
@@ -2261,6 +2564,7 @@ async function renderFromText({ live = false } = {}) {
     state.textDirty = false;
     updateApplyButton();
     setOutOfSync(false);
+    clearError();
     if (!live) pushHistory();
     return true;
   }
@@ -2275,6 +2579,14 @@ async function renderFromText({ live = false } = {}) {
   }
 
   state.model = model;
+  if (state.selectedNodeIds.size) {
+    const validNodeIds = new Set(state.model.nodes.map((n) => n.id));
+    for (const id of Array.from(state.selectedNodeIds)) {
+      if (!validNodeIds.has(id) || isNodeLocked(id)) state.selectedNodeIds.delete(id);
+    }
+  }
+  state.selectedNodeId = state.selectedNodeIds.size === 1 ? Array.from(state.selectedNodeIds)[0] : null;
+  refreshSelectionActions();
   normalizeModelClassNames(state.model);
   if (!state.showInternalBlocks && (!state.model.rawBlocks || state.model.rawBlocks.length === 0) && state.prevRawBlocks?.length) {
     state.model.rawBlocks = state.prevRawBlocks;
@@ -2341,6 +2653,263 @@ function getNodeIdFromElement(el) {
   return getNodeIdFromGroup(g);
 }
 
+function clearSelectionState() {
+  state.selectedNodeId = null;
+  state.selectedNodeIds.clear();
+  state.selectedEdgeId = null;
+  state.edgeAmbiguous = null;
+  refreshSelectionActions();
+}
+
+function getSelectedSingleGroupId() {
+  if (!state.selectedNodeIds.size || !Array.isArray(state.model?.nodes)) return null;
+  const selected = getUnlockedSelectedNodeIds();
+  if (!selected.size) return null;
+  let groupId = null;
+  for (const n of state.model.nodes) {
+    if (!selected.has(n.id)) continue;
+    const gid = n.boundaryId || n.groupId || null;
+    if (!gid) return null;
+    if (groupId == null) groupId = gid;
+    else if (groupId !== gid) return null;
+  }
+  return groupId;
+}
+
+function refreshSelectionActions() {
+  if (!els.selectionActions) return;
+  const count = state.selectedNodeIds.size;
+  const canGroupOps = count >= 2;
+  const canAlign = count >= 2;
+  const canDistribute = count >= 3;
+  const canUngroup = !!getSelectedSingleGroupId();
+  const visible = !state.connectMode && (canGroupOps || canUngroup || canAlign || canDistribute);
+  els.selectionActions.classList.toggle("hidden", !visible);
+  els.selectionActions.setAttribute("aria-hidden", visible ? "false" : "true");
+  if (els.btnSelectionGroup) els.btnSelectionGroup.classList.toggle("hidden", !canGroupOps);
+  if (els.btnSelectionEqualize) els.btnSelectionEqualize.classList.toggle("hidden", !canGroupOps);
+  if (els.btnSelectionUngroup) els.btnSelectionUngroup.classList.toggle("hidden", !canUngroup);
+  if (els.btnSelectionAlignL) els.btnSelectionAlignL.classList.toggle("hidden", !canAlign);
+  if (els.btnSelectionAlignC) els.btnSelectionAlignC.classList.toggle("hidden", !canAlign);
+  if (els.btnSelectionAlignR) els.btnSelectionAlignR.classList.toggle("hidden", !canAlign);
+  if (els.btnSelectionAlignT) els.btnSelectionAlignT.classList.toggle("hidden", !canAlign);
+  if (els.btnSelectionAlignM) els.btnSelectionAlignM.classList.toggle("hidden", !canAlign);
+  if (els.btnSelectionAlignB) els.btnSelectionAlignB.classList.toggle("hidden", !canAlign);
+  if (els.btnSelectionDistH) els.btnSelectionDistH.classList.toggle("hidden", !canDistribute);
+  if (els.btnSelectionDistV) els.btnSelectionDistV.classList.toggle("hidden", !canDistribute);
+  if (els.btnSelectionDelete) els.btnSelectionDelete.classList.toggle("hidden", count < 1);
+  if (els.selectionCount) els.selectionCount.textContent = t("selectionCount", { n: count });
+}
+
+function equalizeSelectedNodes() {
+  if (state.connectMode || state.selectedNodeIds.size < 2) return;
+  const selected = getUnlockedSelectedNodeIds();
+  if (selected.size < 2) return;
+  let changed = false;
+  for (const n of state.model.nodes) {
+    if (!selected.has(n.id)) continue;
+    const wrapped = autoWrapLabel(n.label || n.id, 18);
+    if (!wrapped || wrapped === n.label) continue;
+    n.label = wrapped;
+    changed = true;
+  }
+  if (!changed) return;
+  renderFromModel();
+  pushHistory();
+  markModelDirty("labels equalized");
+}
+
+async function groupSelectedNodes() {
+  if (state.connectMode || state.selectedNodeIds.size < 2) return false;
+  const selected = getUnlockedSelectedNodeIds();
+  if (selected.size < 2) return false;
+  const entered = await requestTextInput("Group name", "Group");
+  if (entered == null) return false;
+  const label = String(entered || "").trim() || "Group";
+  const boundaryRoleIds = Object.keys(state.pack?.boundaryRoles || {});
+  const roleId = boundaryRoleIds.includes("vpc") ? "vpc" : (boundaryRoleIds[0] || "vpc");
+  const ids = new Set((state.model.boundaries || []).map((b) => b.id));
+  const id = nextId(boundaryPrefix(roleId), ids);
+  state.model.boundaries.push({ id, label, role: roleId, direction: "TB" });
+  for (const n of state.model.nodes) {
+    if (!selected.has(n.id)) continue;
+    n.boundaryId = id;
+    n.groupId = id;
+    n.groupName = label;
+  }
+  renderFromModel();
+  pushHistory();
+  markModelDirty("nodes grouped");
+  return true;
+}
+
+function ungroupSelectedNodes() {
+  if (state.connectMode || state.selectedNodeIds.size < 1) return false;
+  const selected = getUnlockedSelectedNodeIds();
+  if (!selected.size) return false;
+  const groupId = getSelectedSingleGroupId();
+  if (!groupId) return false;
+  let changed = false;
+  for (const n of state.model.nodes) {
+    if (!selected.has(n.id)) continue;
+    if ((n.boundaryId || n.groupId || null) !== groupId) continue;
+    if (n.boundaryId || n.groupId || n.groupName) changed = true;
+    n.boundaryId = null;
+    n.groupId = null;
+    n.groupName = null;
+  }
+  if (!changed) return false;
+  const stillUsingGroup = state.model.nodes.some((n) => (n.boundaryId || n.groupId || null) === groupId);
+  if (!stillUsingGroup) {
+    state.model.boundaries = state.model.boundaries.filter((b) => b.id !== groupId);
+  }
+  renderFromModel();
+  pushHistory();
+  markModelDirty("nodes ungrouped");
+  return true;
+}
+
+function nudgeSelectedNodes(dx, dy) {
+  if (state.connectMode) return false;
+  const selectedIds = state.selectedNodeIds.size
+    ? getUnlockedSelectedNodeIds()
+    : (state.selectedNodeId ? new Set([state.selectedNodeId]) : new Set());
+  if (!selectedIds.size) return false;
+  let changed = false;
+  for (const node of state.model.nodes) {
+    if (!selectedIds.has(node.id)) continue;
+    const pos = getPinnedOffset(node);
+    setPinnedOffset(node, { x: pos.x + dx, y: pos.y + dy });
+    changed = true;
+  }
+  if (!changed) return false;
+  renderFromModel({ updateSource: true, preserveWarnings: true });
+  pushHistory();
+  markModelDirty("node position changed");
+  return true;
+}
+
+function getNodeBBoxInSvgSpace(nodeGroup) {
+  if (!nodeGroup) return null;
+  const svg = nodeGroup.ownerSVGElement;
+  if (!svg) return null;
+  const bbox = nodeGroup.getBBox();
+  const ctm = nodeGroup.getCTM();
+  if (!ctm) return null;
+  const p1 = svg.createSVGPoint();
+  p1.x = bbox.x;
+  p1.y = bbox.y;
+  const p2 = svg.createSVGPoint();
+  p2.x = bbox.x + bbox.width;
+  p2.y = bbox.y + bbox.height;
+  const g1 = p1.matrixTransform(ctm);
+  const g2 = p2.matrixTransform(ctm);
+  return {
+    x: Math.min(g1.x, g2.x),
+    y: Math.min(g1.y, g2.y),
+    w: Math.abs(g2.x - g1.x),
+    h: Math.abs(g2.y - g1.y)
+  };
+}
+
+function applyAlignment(mode) {
+  if (state.connectMode || state.selectedNodeIds.size < 2) return false;
+  const svg = els.preview.querySelector("svg");
+  if (!svg) return false;
+  const selected = getUnlockedSelectedNodeIds();
+  if (selected.size < 2) return false;
+  const nodeGroups = new Map();
+  for (const gNode of svg.querySelectorAll("g.node")) {
+    const gid = getNodeIdFromGroup(gNode);
+    if (gid) nodeGroups.set(gid, gNode);
+  }
+  const infos = [];
+  for (const node of state.model.nodes) {
+    if (!selected.has(node.id)) continue;
+    const gNode = nodeGroups.get(node.id);
+    if (!gNode) continue;
+    const rect = getNodeBBoxInSvgSpace(gNode);
+    if (!rect) continue;
+    infos.push({ id: node.id, node, rect });
+  }
+  if (infos.length < 2) return false;
+  const next = alignRects(infos.map((it) => ({ id: it.id, ...it.rect })), mode);
+  const byId = new Map(next.map((r) => [r.id, r]));
+  let changed = false;
+  for (const it of infos) {
+    const to = byId.get(it.id);
+    if (!to) continue;
+    const dx = to.x - it.rect.x;
+    const dy = to.y - it.rect.y;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) continue;
+    const pos = getPinnedOffset(it.node);
+    setPinnedOffset(it.node, { x: pos.x + dx, y: pos.y + dy });
+    changed = true;
+  }
+  if (!changed) return false;
+  renderFromModel({ updateSource: true, preserveWarnings: true });
+  pushHistory();
+  markModelDirty(`nodes aligned (${mode})`);
+  return true;
+}
+
+function applyDistribute(axis) {
+  if (state.connectMode || state.selectedNodeIds.size < 3) return false;
+  const svg = els.preview.querySelector("svg");
+  if (!svg) return false;
+  const selected = getUnlockedSelectedNodeIds();
+  if (selected.size < 3) return false;
+  const nodeGroups = new Map();
+  for (const gNode of svg.querySelectorAll("g.node")) {
+    const gid = getNodeIdFromGroup(gNode);
+    if (gid) nodeGroups.set(gid, gNode);
+  }
+  const infos = [];
+  for (const node of state.model.nodes) {
+    if (!selected.has(node.id)) continue;
+    const gNode = nodeGroups.get(node.id);
+    if (!gNode) continue;
+    const rect = getNodeBBoxInSvgSpace(gNode);
+    if (!rect) continue;
+    infos.push({ id: node.id, node, rect });
+  }
+  if (infos.length < 3) return false;
+  const next = distributeRects(infos.map((it) => ({ id: it.id, ...it.rect })), axis);
+  const byId = new Map(next.map((r) => [r.id, r]));
+  let changed = false;
+  for (const it of infos) {
+    const to = byId.get(it.id);
+    if (!to) continue;
+    const dx = to.x - it.rect.x;
+    const dy = to.y - it.rect.y;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) continue;
+    const pos = getPinnedOffset(it.node);
+    setPinnedOffset(it.node, { x: pos.x + dx, y: pos.y + dy });
+    changed = true;
+  }
+  if (!changed) return false;
+  renderFromModel({ updateSource: true, preserveWarnings: true });
+  pushHistory();
+  markModelDirty(`nodes distributed (${axis})`);
+  return true;
+}
+
+function applyToNodeOrSelection(contextNode, updater, dirtyReason) {
+  if (!contextNode || typeof updater !== "function") return;
+  const selected =
+    state.selectedNodeIds.size > 1 && state.selectedNodeIds.has(contextNode.id)
+      ? state.model.nodes.filter((n) => state.selectedNodeIds.has(n.id))
+      : [contextNode];
+  let changed = false;
+  for (const n of selected) {
+    if (updater(n)) changed = true;
+  }
+  if (!changed) return;
+  renderFromModel();
+  pushHistory();
+  markModelDirty(dirtyReason);
+}
+
 function parseTranslate(transform) {
   const m = String(transform || "").match(/translate\(([-\d.]+)[,\s]+([-\d.]+)\)/);
   if (!m) return { x: 0, y: 0 };
@@ -2361,6 +2930,7 @@ function applyNodePositions(svg) {
     const id = getNodeIdFromGroup(g);
     if (!id) continue;
     g.dataset.aeNodeId = id;
+    g.dataset.nodeId = id;
     mapped += 1;
     const modelNode = state.model.nodes.find((n) => n.id === id);
     const base = parseTranslate(g.getAttribute("transform"));
@@ -2395,16 +2965,30 @@ function applyNodePositions(svg) {
 }
 
 function applySelection(svg) {
-  svg.querySelectorAll("g.node.ae-selected").forEach((g) => g.classList.remove("ae-selected"));
+  svg.querySelectorAll("g.node.ae-selected, g.node.isSelected, g.node.isLocked").forEach((g) => {
+    g.classList.remove("ae-selected");
+    g.classList.remove("isSelected");
+    g.classList.remove("isLocked");
+  });
   svg.querySelectorAll("g.edgePath.ae-selected").forEach((g) => g.classList.remove("ae-selected"));
   svg.querySelectorAll("g.node.ae-hover").forEach((g) => g.classList.remove("ae-hover"));
   svg.querySelectorAll("g.edgePath.ae-hover").forEach((g) => g.classList.remove("ae-hover"));
-  if (state.selectedNodeId) {
+  if (state.selectedNodeIds.size) {
+    const nodes = svg.querySelectorAll("g.node");
+    for (const g of nodes) {
+      const id = getNodeIdFromElement(g);
+      if (id && state.selectedNodeIds.has(id)) {
+        g.classList.add("ae-selected");
+        g.classList.add("isSelected");
+      }
+    }
+  } else if (state.selectedNodeId) {
     const nodes = svg.querySelectorAll("g.node");
     for (const g of nodes) {
       const id = getNodeIdFromElement(g);
       if (id === state.selectedNodeId) {
         g.classList.add("ae-selected");
+        g.classList.add("isSelected");
         break;
       }
     }
@@ -2438,6 +3022,12 @@ function applySelection(svg) {
       }
     }
   }
+  const nodes = svg.querySelectorAll("g.node");
+  for (const g of nodes) {
+    const id = getNodeIdFromElement(g);
+    if (id && isNodeLocked(id)) g.classList.add("isLocked");
+  }
+  refreshSelectionActions();
 }
 
 function clientToSvg(svg, clientX, clientY) {
@@ -2494,6 +3084,96 @@ function renderPropPanel() {
     updateInspectorState();
     return;
   }
+  if (state.selectedNodeIds.size > 1) {
+    if (inspectorBody) {
+      inspectorBody.innerHTML = "";
+      const info = document.createElement("div");
+      info.className = "propRow";
+      info.textContent = `${state.selectedNodeIds.size} nodes selected`;
+      inspectorBody.appendChild(info);
+
+      const selectedIds = new Set(state.selectedNodeIds);
+      const selectedNodes = state.model.nodes.filter((n) => selectedIds.has(n.id));
+      const anchorNode = selectedNodes[0] || null;
+      const applyToSelectedNodes = (fn, dirtyReason) => {
+        if (!anchorNode) return;
+        applyToNodeOrSelection(anchorNode, fn, dirtyReason);
+      };
+
+      const rowShape = document.createElement("div");
+      rowShape.className = "propRow";
+      const shapeLabel = document.createElement("div");
+      shapeLabel.className = "propLabel";
+      shapeLabel.textContent = "Shape (batch)";
+      const shapeSelect = document.createElement("select");
+      shapeSelect.className = "select wide";
+      const shapes = [
+        { id: "", label: "Default" },
+        { id: "rect", label: "Rectangle" },
+        { id: "round", label: "Round" },
+        { id: "circle", label: "Circle" },
+        { id: "cylinder", label: "Cylinder" },
+        { id: "diamond", label: "Diamond" },
+        { id: "hex", label: "Hex" },
+        { id: "parallelogram", label: "Parallelogram" }
+      ];
+      const shapeValues = new Set(selectedNodes.map((n) => n.shape || ""));
+      for (const s of shapes) {
+        const opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = s.label;
+        if (shapeValues.size === 1 && shapeValues.has(s.id)) opt.selected = true;
+        shapeSelect.appendChild(opt);
+      }
+      shapeSelect.addEventListener("change", () => {
+        const nextShape = shapeSelect.value || null;
+        applyToSelectedNodes((n) => {
+          if ((n.shape || null) === nextShape) return false;
+          n.shape = nextShape;
+          return true;
+        }, "node shape changed");
+      });
+      rowShape.appendChild(shapeLabel);
+      rowShape.appendChild(shapeSelect);
+      inspectorBody.appendChild(rowShape);
+
+      const rowColor = document.createElement("div");
+      rowColor.className = "propRow";
+      const colorLabel = document.createElement("div");
+      colorLabel.className = "propLabel";
+      colorLabel.textContent = "Color (batch)";
+      const colorRow = document.createElement("div");
+      colorRow.className = "row";
+      const palette = [
+        { id: "", label: "Default" },
+        { id: "accent-blue", label: "Blue" },
+        { id: "accent-green", label: "Green" },
+        { id: "accent-amber", label: "Amber" },
+        { id: "accent-red", label: "Red" }
+      ];
+      for (const p of palette) {
+        const btn = document.createElement("button");
+        btn.className = "btn";
+        btn.textContent = p.label;
+        btn.addEventListener("click", () => {
+          applyToSelectedNodes((n) => {
+            const nextClass = p.id || null;
+            if ((n.className || null) === nextClass) return false;
+            n.className = nextClass;
+            return true;
+          }, "node class changed");
+        });
+        colorRow.appendChild(btn);
+      }
+      rowColor.appendChild(colorLabel);
+      rowColor.appendChild(colorRow);
+      inspectorBody.appendChild(rowColor);
+    }
+    setInspectorHeader("Inspector", `${state.selectedNodeIds.size} selected`, "ok");
+    setInspectorEmptyState(false);
+    updateInspectorState();
+    return;
+  }
   const target =
     state.selectedNodeId || state.selectedEdgeId
       ? { type: state.selectedNodeId ? "node" : "edge", id: state.selectedNodeId || state.selectedEdgeId, mode: "selected" }
@@ -2502,8 +3182,8 @@ function renderPropPanel() {
         : null;
 
   if (!target) {
-    if (inspectorBody) inspectorBody.textContent = "Select a node/edge to edit";
-    setInspectorHeader("Inspector", "Select", "muted");
+    if (inspectorBody) inspectorBody.textContent = t("inspectorSelectHint");
+    setInspectorHeader(t("inspectorTitle"), t("inspectorSelect"), "muted");
     setInspectorEmptyState(true);
     updateInspectorState();
     return;
@@ -2679,10 +3359,12 @@ function renderPropPanel() {
       btn.textContent = p.label;
       btn.disabled = isHover;
       btn.addEventListener("click", () => {
-        node.className = p.id || null;
-        renderFromModel();
-        pushHistory();
-        markModelDirty("node class changed");
+        const nextClass = p.id || null;
+        applyToNodeOrSelection(node, (n) => {
+          if ((n.className || null) === nextClass) return false;
+          n.className = nextClass;
+          return true;
+        }, "node class changed");
       });
       colorRow.appendChild(btn);
     }
@@ -2752,14 +3434,29 @@ function renderPropPanel() {
     }
 
     const update = debounce(() => {
-      node.label = labelInput.value;
-      node.comment = commentInput.value;
-      node.role = roleSelect.value;
       const shapeVal = shapeSelect.value || null;
-      node.shape = shapeVal || null;
-      renderFromModel();
-      pushHistory();
-      markModelDirty("node property changed");
+      applyToNodeOrSelection(node, (n) => {
+        let changed = false;
+        if (n === node) {
+          if (n.label !== labelInput.value) {
+            n.label = labelInput.value;
+            changed = true;
+          }
+          if (n.comment !== commentInput.value) {
+            n.comment = commentInput.value;
+            changed = true;
+          }
+          if (n.role !== roleSelect.value) {
+            n.role = roleSelect.value;
+            changed = true;
+          }
+        }
+        if ((n.shape || null) !== shapeVal) {
+          n.shape = shapeVal || null;
+          changed = true;
+        }
+        return changed;
+      }, "node property changed");
     }, 300);
     labelInput.addEventListener("input", update);
     commentInput.addEventListener("input", update);
@@ -2994,11 +3691,23 @@ function redoModel() {
 }
 
 function deleteSelected() {
+  if (state.connectMode) return;
+  if (state.selectedNodeIds.size > 0) {
+    const selected = getUnlockedSelectedNodeIds();
+    if (!selected.size) return;
+    state.model.nodes = state.model.nodes.filter((n) => !selected.has(n.id));
+    state.model.edges = state.model.edges.filter((e) => !selected.has(e.from) && !selected.has(e.to));
+    clearSelectionState();
+    pushHistory();
+    renderFromModel();
+    return;
+  }
   if (state.selectedNodeId) {
     const id = state.selectedNodeId;
+    if (isNodeLocked(id)) return;
     state.model.nodes = state.model.nodes.filter((n) => n.id !== id);
     state.model.edges = state.model.edges.filter((e) => e.from !== id && e.to !== id);
-    state.selectedNodeId = null;
+    clearSelectionState();
     pushHistory();
     renderFromModel();
     return;
@@ -3006,7 +3715,7 @@ function deleteSelected() {
   if (state.selectedEdgeId) {
     const id = state.selectedEdgeId;
     state.model.edges = state.model.edges.filter((e) => e.id !== id);
-    state.selectedEdgeId = null;
+    clearSelectionState();
     pushHistory();
     renderFromModel();
   }
@@ -3040,6 +3749,9 @@ function centerOnSelected() {
 }
 
 function selectNodeById(id) {
+  if (id && isNodeLocked(id)) return;
+  state.selectedNodeIds.clear();
+  if (id) state.selectedNodeIds.add(id);
   state.selectedNodeId = id;
   state.selectedEdgeId = null;
   state.edgeAmbiguous = null;
@@ -3052,6 +3764,7 @@ function selectNodeById(id) {
 function selectEdgeById(id) {
   state.selectedEdgeId = id;
   state.selectedNodeId = null;
+  state.selectedNodeIds.clear();
   state.edgeAmbiguous = null;
   renderPropPanel();
   const svg = els.preview.querySelector("svg");
@@ -3079,8 +3792,28 @@ function attachNodeInteractions(svg) {
       highlightList();
     });
     g.addEventListener("click", (evt) => {
+      if (suppressNextCanvasClick) {
+        suppressNextCanvasClick = false;
+        return;
+      }
       const id = getNodeIdFromElement(evt.target);
-      if (id) selectNodeById(id);
+      if (!id) return;
+      if (isNodeLocked(id)) return;
+      if (evt.shiftKey && !state.connectMode) {
+        if (state.selectedNodeIds.has(id)) {
+          state.selectedNodeIds.delete(id);
+        } else {
+          state.selectedNodeIds.add(id);
+        }
+        state.selectedNodeId = state.selectedNodeIds.size === 1 ? Array.from(state.selectedNodeIds)[0] : null;
+        state.selectedEdgeId = null;
+        state.edgeAmbiguous = null;
+        renderPropPanel();
+        applySelection(svg);
+        highlightList();
+        return;
+      }
+      selectNodeById(id);
     });
     g.addEventListener("dblclick", async (evt) => {
       const id = getNodeIdFromElement(evt.target);
@@ -3248,6 +3981,10 @@ function attachNodeInteractions(svg) {
       highlightList();
     });
     g.addEventListener("click", () => {
+      if (suppressNextCanvasClick) {
+        suppressNextCanvasClick = false;
+        return;
+      }
       if (g.dataset.aeEdgeId) {
         state.edgeAmbiguous = null;
         selectEdgeById(g.dataset.aeEdgeId);
@@ -3284,8 +4021,26 @@ function attachNodeInteractions(svg) {
     void openEdgeLabelEditor(edgeId);
   });
 
+  svg.addEventListener("click", (evt) => {
+    if (suppressNextCanvasClick) {
+      suppressNextCanvasClick = false;
+      return;
+    }
+    const target = evt.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("g.node, g.edgePath, g.edgeLabel, circle.ae-handle")) return;
+    clearSelectionState();
+    renderPropPanel();
+    applySelection(svg);
+    highlightList();
+  });
+
   let dragNode = null;
+  let marquee = null;
+  let marqueeCandidate = null;
+  let suppressNextCanvasClick = false;
   const DRAG_THRESHOLD_PX = 2;
+  const MARQUEE_START_THRESHOLD_PX = 5;
   let dragOverlayLines = [];
   const liveMutatedPaths = new Map();
   const liveMutatedLabels = new Map();
@@ -3432,7 +4187,43 @@ function attachNodeInteractions(svg) {
     }
   };
 
+  const intersects = (a, b) => {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  };
+
+  const clearMarquee = () => {
+    if (marquee?.rect?.isConnected) marquee.rect.remove();
+    marquee = null;
+  };
+
+  const beginMarqueeSelection = (evt, candidate) => {
+    const start = clientToSvg(svg, candidate.startClientX, candidate.startClientY);
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("class", "ae-selection-box");
+    rect.setAttribute("x", String(start.x));
+    rect.setAttribute("y", String(start.y));
+    rect.setAttribute("width", "0");
+    rect.setAttribute("height", "0");
+    rect.setAttribute("pointer-events", "none");
+    svg.appendChild(rect);
+    marquee = {
+      pointerId: candidate.pointerId,
+      startClientX: candidate.startClientX,
+      startClientY: candidate.startClientY,
+      startSvgX: start.x,
+      startSvgY: start.y,
+      active: true,
+      shiftAdd: !!candidate.shiftAdd,
+      rect
+    };
+    marqueeCandidate = null;
+    svg.setPointerCapture(evt.pointerId);
+    evt.preventDefault();
+    evt.stopPropagation();
+  };
+
   svg.addEventListener("pointerdown", (evt) => {
+    if (suppressNextCanvasClick) suppressNextCanvasClick = false;
     if (evt.button !== 0) return;
     const handle = evt.target.closest("circle.ae-handle");
     if (state.connectMode && handle) {
@@ -3471,30 +4262,67 @@ function attachNodeInteractions(svg) {
       return;
     }
     const g = evt.target.closest("g.node");
-    if (!g) return;
+    if (!g) {
+      const blockedHandle = evt.target.closest("circle.ae-handle");
+      if (blockedHandle) return;
+      marqueeCandidate = {
+        pointerId: evt.pointerId,
+        startClientX: evt.clientX,
+        startClientY: evt.clientY,
+        shiftAdd: !!evt.shiftKey
+      };
+      return;
+    }
     const id = getNodeIdFromElement(g);
     const node = state.model.nodes.find((n) => n.id === id);
     if (!node) return;
-    const offset = getPinnedOffset(node);
-    const currentTranslate = parseTranslate(g.getAttribute("transform"));
-    const pt = clientToSvg(svg, evt.clientX, evt.clientY);
-    const baseX = parseFloat(g.dataset.baseX || String(currentTranslate.x - offset.x));
-    const baseY = parseFloat(g.dataset.baseY || String(currentTranslate.y - offset.y));
+    if (node.locked) return;
+    const selectedIds =
+      state.selectedNodeIds.size > 1 && state.selectedNodeIds.has(id)
+        ? Array.from(getUnlockedSelectedNodeIds())
+        : [id];
+    const nodeGroups = new Map();
+    for (const gNode of svg.querySelectorAll("g.node")) {
+      const gid = getNodeIdFromGroup(gNode);
+      if (gid) nodeGroups.set(gid, gNode);
+    }
+    const items = [];
+    for (const sid of selectedIds) {
+      const sNode = state.model.nodes.find((n) => n.id === sid);
+      const sGroup = nodeGroups.get(sid);
+      if (!sNode || !sGroup) continue;
+      const offset = getPinnedOffset(sNode);
+      const currentTranslate = parseTranslate(sGroup.getAttribute("transform"));
+      const baseX = parseFloat(sGroup.dataset.baseX || String(currentTranslate.x - offset.x));
+      const baseY = parseFloat(sGroup.dataset.baseY || String(currentTranslate.y - offset.y));
+      items.push({
+        id: sid,
+        node: sNode,
+        g: sGroup,
+        startPos: { ...offset },
+        startTranslateX: currentTranslate.x,
+        startTranslateY: currentTranslate.y,
+        baseX,
+        baseY
+      });
+    }
+    if (!items.length) return;
+    const startPt = clientToSvg(svg, evt.clientX, evt.clientY);
     dragNode = {
       g,
       id,
       node,
+      items,
       pointerId: evt.pointerId,
       startClientX: evt.clientX,
       startClientY: evt.clientY,
       lastClientX: evt.clientX,
       lastClientY: evt.clientY,
-      startPos: { ...offset },
+      startPos: items[0]?.startPos || { x: 0, y: 0 },
+      startSvgX: startPt.x,
+      startSvgY: startPt.y,
       active: false,
-      baseX,
-      baseY,
-      grabX: pt.x - currentTranslate.x,
-      grabY: pt.y - currentTranslate.y
+      multi: items.length > 1
     };
     g.setPointerCapture(evt.pointerId);
     evt.preventDefault();
@@ -3502,6 +4330,26 @@ function attachNodeInteractions(svg) {
   });
 
   svg.addEventListener("pointermove", (evt) => {
+    if (marqueeCandidate && evt.pointerId === marqueeCandidate.pointerId) {
+      const dxPx = evt.clientX - marqueeCandidate.startClientX;
+      const dyPx = evt.clientY - marqueeCandidate.startClientY;
+      if (Math.hypot(dxPx, dyPx) >= MARQUEE_START_THRESHOLD_PX) {
+        beginMarqueeSelection(evt, marqueeCandidate);
+      }
+      return;
+    }
+    if (marquee && evt.pointerId === marquee.pointerId) {
+      const pt = clientToSvg(svg, evt.clientX, evt.clientY);
+      const x = Math.min(marquee.startSvgX, pt.x);
+      const y = Math.min(marquee.startSvgY, pt.y);
+      const w = Math.abs(pt.x - marquee.startSvgX);
+      const h = Math.abs(pt.y - marquee.startSvgY);
+      marquee.rect.setAttribute("x", String(x));
+      marquee.rect.setAttribute("y", String(y));
+      marquee.rect.setAttribute("width", String(w));
+      marquee.rect.setAttribute("height", String(h));
+      return;
+    }
     if (!dragNode) return;
     if (evt.pointerId !== dragNode.pointerId) return;
     dragNode.lastClientX = evt.clientX;
@@ -3520,30 +4368,72 @@ function attachNodeInteractions(svg) {
     }
 
     const pt = clientToSvg(svg, dragNode.lastClientX, dragNode.lastClientY);
-    const targetX = pt.x - dragNode.grabX;
-    const targetY = pt.y - dragNode.grabY;
-    const next = { x: targetX - dragNode.baseX, y: targetY - dragNode.baseY };
-    setPinnedOffset(dragNode.node, next);
-    setNodeTransform(dragNode.g, targetX, targetY);
-    updateConnectedEdgesLive(dragNode.id);
+    const deltaX = pt.x - dragNode.startSvgX;
+    const deltaY = pt.y - dragNode.startSvgY;
+    for (const item of dragNode.items) {
+      const targetX = item.startTranslateX + deltaX;
+      const targetY = item.startTranslateY + deltaY;
+      const next = { x: targetX - item.baseX, y: targetY - item.baseY };
+      setPinnedOffset(item.node, next);
+      setNodeTransform(item.g, targetX, targetY);
+      updateConnectedEdgesLive(item.id);
+    }
     updateDragOverlay();
   });
 
   svg.addEventListener("pointerup", (evt) => {
+    if (marqueeCandidate && evt.pointerId === marqueeCandidate.pointerId) {
+      marqueeCandidate = null;
+      return;
+    }
+    if (marquee && evt.pointerId === marquee.pointerId) {
+      const x = parseFloat(marquee.rect.getAttribute("x") || "0");
+      const y = parseFloat(marquee.rect.getAttribute("y") || "0");
+      const w = parseFloat(marquee.rect.getAttribute("width") || "0");
+      const h = parseFloat(marquee.rect.getAttribute("height") || "0");
+      const box = { x, y, w, h };
+      const nextSelected = marquee.shiftAdd ? new Set(state.selectedNodeIds) : new Set();
+      for (const g of svg.querySelectorAll("g.node")) {
+        const id = getNodeIdFromElement(g);
+        if (!id) continue;
+        if (isNodeLocked(id)) continue;
+        const nb = getNodeBBoxInSvgSpace(g);
+        if (!nb) continue;
+        if (intersects(box, nb)) nextSelected.add(id);
+      }
+      state.selectedNodeIds = nextSelected;
+      state.selectedNodeId = state.selectedNodeIds.size === 1 ? Array.from(state.selectedNodeIds)[0] : null;
+      state.selectedEdgeId = null;
+      state.edgeAmbiguous = null;
+      renderPropPanel();
+      applySelection(svg);
+      highlightList();
+      suppressNextCanvasClick = true;
+      try {
+        svg.releasePointerCapture(evt.pointerId);
+      } catch {}
+      clearMarquee();
+      return;
+    }
     if (!dragNode) return;
     if (evt.pointerId !== dragNode.pointerId) return;
     const id = dragNode.id;
     if (dragNode.active) {
       const pt = clientToSvg(svg, evt.clientX, evt.clientY);
-      const finalOffset = {
-        x: pt.x - dragNode.grabX - dragNode.baseX,
-        y: pt.y - dragNode.grabY - dragNode.baseY
-      };
-      setPinnedOffset(dragNode.node, finalOffset);
+      const deltaX = pt.x - dragNode.startSvgX;
+      const deltaY = pt.y - dragNode.startSvgY;
+      for (const item of dragNode.items) {
+        const finalOffset = {
+          x: item.startTranslateX + deltaX - item.baseX,
+          y: item.startTranslateY + deltaY - item.baseY
+        };
+        setPinnedOffset(item.node, finalOffset);
+      }
       dragNode.g.releasePointerCapture(evt.pointerId);
+      const wasMulti = dragNode.multi;
       dragNode = null;
-      devLog("drag:end", { nodeId: id, pinnedOffset: finalOffset, syncRev: state.syncRev });
-      selectNodeById(id);
+      devLog("drag:end", { nodeId: id, multi: wasMulti, syncRev: state.syncRev });
+      if (!wasMulti) selectNodeById(id);
       pushHistory();
       restoreLiveMutations();
       clearDragOverlay();
@@ -3558,6 +4448,17 @@ function attachNodeInteractions(svg) {
   });
 
   svg.addEventListener("pointercancel", (evt) => {
+    if (marqueeCandidate && evt.pointerId === marqueeCandidate.pointerId) {
+      marqueeCandidate = null;
+      return;
+    }
+    if (marquee && evt.pointerId === marquee.pointerId) {
+      clearMarquee();
+      try {
+        svg.releasePointerCapture(evt.pointerId);
+      } catch {}
+      return;
+    }
     if (!dragNode || evt.pointerId !== dragNode.pointerId) return;
     clearDragOverlay();
     restoreLiveMutations();
@@ -3577,6 +4478,12 @@ function runPostRenderHook(svgEl) {
   attachNodeInteractions(svgEl);
   applyConnectHandles(svgEl);
   applySelection(svgEl);
+  if (state.pendingAutoFit) {
+    state.pendingAutoFit = false;
+    requestAnimationFrame(() => {
+      fitPreviewToView();
+    });
+  }
   const mapped = Array.from(svgEl.querySelectorAll("g.node")).filter((g) => !!getNodeIdFromGroup(g)).length;
   devLog("postRenderHook", {
     svgFound: true,
@@ -3602,6 +4509,7 @@ async function renderMermaid(text, { expectedRev = null } = {}) {
     if (seq !== state.renderSeq) return;
     const svgEl = container.querySelector("svg");
     if (!svgEl) {
+      state.pendingAutoFit = false;
       setProblems(
         [{ type: "error", message: "Render produced no SVG. Check Mermaid syntax.", line: 1, column: 1 }],
         { status: "error", open: true }
@@ -3624,6 +4532,7 @@ async function renderMermaid(text, { expectedRev = null } = {}) {
       setStatus("ok", "ready");
     }
   } catch (err) {
+    state.pendingAutoFit = false;
     if (seq !== state.renderSeq) return;
     if (expectedRev !== null && !isLatestRev(expectedRev)) return;
     if (state.lastSvgText) {
@@ -3637,6 +4546,13 @@ async function renderMermaid(text, { expectedRev = null } = {}) {
 }
 
 function wireToolbar() {
+  const closeToolbarMenus = (exceptTarget = null) => {
+    document.querySelectorAll(".toolbar details.menu[open]").forEach((menu) => {
+      if (exceptTarget && menu.contains(exceptTarget)) return;
+      menu.open = false;
+    });
+  };
+
   const preparePersistContent = async () => {
     const prep = await prepareContentForSave({
       mode: "text",
@@ -3700,9 +4616,38 @@ function wireToolbar() {
       if (!res.ok) showError(res.error || "Save failed");
     });
   };
+  const handleClearAll = async () => {
+    const ok = window.confirm(t("clearAllConfirm"));
+    if (!ok) return;
+    applyBlankState({ resetFilePath: true });
+    pushHistory();
+  };
+  const handleGroup = async () => {
+    if (state.connectMode) return;
+    if (getUnlockedSelectedNodeIds().size < 2) {
+      showWarning("Group requires 2 or more selected nodes.");
+      return;
+    }
+    await groupSelectedNodes();
+  };
+  const handleEqualize = () => {
+    equalizeSelectedNodes();
+  };
+  const handleUngroup = () => {
+    ungroupSelectedNodes();
+  };
+  const handleAlign = (mode) => {
+    applyAlignment(mode);
+  };
+  const handleDistribute = (axis) => {
+    applyDistribute(axis);
+  };
   state.menuHandlers["file:open"] = handleOpen;
   state.menuHandlers["file:save"] = handleSave;
   state.menuHandlers["file:saveAs"] = handleSaveAs;
+  state.menuHandlers["file:clearAll"] = handleClearAll;
+  state.menuHandlers["edit:group"] = handleGroup;
+  state.menuHandlers["edit:equalize"] = handleEqualize;
 
   els.btnNew.addEventListener("click", () => {
     if (els.newDialog) {
@@ -3712,6 +4657,12 @@ function wireToolbar() {
   });
 
   els.btnOpen.addEventListener("click", handleOpen);
+  els.btnClearAll?.addEventListener("click", () => {
+    void handleClearAll();
+  });
+  els.btnClearAllTop?.addEventListener("click", () => {
+    els.btnClearAll?.click();
+  });
 
   els.btnSaveAs.addEventListener("click", handleSaveAs);
 
@@ -3794,6 +4745,51 @@ function wireToolbar() {
     renderFromModel({ updateSource: false });
     markModelDirty("re-layout requested");
   });
+  if (els.btnGroup) {
+    els.btnGroup.addEventListener("click", () => {
+      void handleGroup();
+    });
+  }
+  if (els.btnEqualize) {
+    els.btnEqualize.addEventListener("click", () => {
+      handleEqualize();
+    });
+  }
+  if (els.selectionActions) {
+    const stop = (evt) => {
+      evt.stopPropagation();
+    };
+    els.selectionActions.addEventListener("pointerdown", stop);
+    els.selectionActions.addEventListener("click", stop);
+  }
+  if (els.btnSelectionGroup) {
+    els.btnSelectionGroup.addEventListener("click", () => {
+      void handleGroup();
+    });
+  }
+  if (els.btnSelectionEqualize) {
+    els.btnSelectionEqualize.addEventListener("click", () => {
+      handleEqualize();
+    });
+  }
+  if (els.btnSelectionUngroup) {
+    els.btnSelectionUngroup.addEventListener("click", () => {
+      handleUngroup();
+    });
+  }
+  if (els.btnSelectionAlignL) els.btnSelectionAlignL.addEventListener("click", () => handleAlign("left"));
+  if (els.btnSelectionAlignC) els.btnSelectionAlignC.addEventListener("click", () => handleAlign("center"));
+  if (els.btnSelectionAlignR) els.btnSelectionAlignR.addEventListener("click", () => handleAlign("right"));
+  if (els.btnSelectionAlignT) els.btnSelectionAlignT.addEventListener("click", () => handleAlign("top"));
+  if (els.btnSelectionAlignM) els.btnSelectionAlignM.addEventListener("click", () => handleAlign("middle"));
+  if (els.btnSelectionAlignB) els.btnSelectionAlignB.addEventListener("click", () => handleAlign("bottom"));
+  if (els.btnSelectionDistH) els.btnSelectionDistH.addEventListener("click", () => handleDistribute("x"));
+  if (els.btnSelectionDistV) els.btnSelectionDistV.addEventListener("click", () => handleDistribute("y"));
+  if (els.btnSelectionDelete) {
+    els.btnSelectionDelete.addEventListener("click", () => {
+      deleteSelected();
+    });
+  }
 
   if (els.btnConnect) {
     els.btnConnect.addEventListener("click", () => {
@@ -3847,17 +4843,7 @@ function wireToolbar() {
 
   if (els.btnZoomFit) {
     els.btnZoomFit.addEventListener("click", () => {
-      const svg = els.preview.querySelector("svg");
-      const wrap = $("previewWrap");
-      if (!svg || !wrap) return;
-      const box = svg.getBBox();
-      const rect = wrap.getBoundingClientRect();
-      if (!box.width || !box.height) return;
-      const scale = Math.min(rect.width / box.width, rect.height / box.height);
-      state.zoom = clampZoom(scale * 0.95);
-      state.panX = rect.width / 2 - (box.x + box.width / 2) * state.zoom;
-      state.panY = rect.height / 2 - (box.y + box.height / 2) * state.zoom;
-      applyZoom();
+      fitPreviewToView();
     });
   }
 
@@ -4009,6 +4995,50 @@ function wireToolbar() {
     });
   }
 
+  if (els.selLanguage) {
+    els.selLanguage.addEventListener("change", () => {
+      const value = els.selLanguage.value || "system";
+      setLanguage(value);
+      applyLanguageUi();
+      applyInspectorVisibility();
+      refreshSelectionActions();
+    });
+  }
+
+  if (els.btnShowTips) {
+    els.btnShowTips.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      openTipsDialog({ persistSeen: false });
+      const menu = els.btnShowTips.closest("details.menu");
+      if (menu) menu.open = false;
+    });
+  }
+
+  if (els.btnTipsGotIt) {
+    els.btnTipsGotIt.addEventListener("click", () => {
+      closeTipsDialog({ persistSeen: true });
+    });
+  }
+
+  if (els.tipsDialog) {
+    els.tipsDialog.addEventListener("click", (evt) => {
+      if (evt.target === els.tipsDialog) {
+        closeTipsDialog({ persistSeen: true });
+      }
+    });
+  }
+
+  if (els.btnReportBug) {
+    els.btnReportBug.addEventListener("click", async (evt) => {
+      evt.preventDefault();
+      const res = await window.api?.openExternalUrl?.({ url: SUPPORT_URL });
+      if (!res?.ok) {
+        showWarning(res?.error || "Could not open support URL.");
+      }
+    });
+  }
+
   if (els.btnCopyDiagnostics) {
     els.btnCopyDiagnostics.addEventListener("click", async () => {
       if (!window.api?.copyDiagnostics) return;
@@ -4090,6 +5120,29 @@ function wireToolbar() {
     });
   }
 
+  document.addEventListener("pointerdown", (evt) => {
+    const target = evt.target;
+    if (!(target instanceof Element)) {
+      closeToolbarMenus();
+      return;
+    }
+    if (state.selectedNodeIds.size || state.selectedNodeId || state.selectedEdgeId) {
+      const keepSelection =
+        target.closest("#selectionActions") ||
+        target.closest("g.node, g.edgePath, g.edgeLabel, circle.ae-handle") ||
+        target.closest("#nodeList .item, #edgeList .item, #boundaryList .item") ||
+        target.closest("#inspector");
+      if (!keepSelection) {
+        clearSelectionState();
+        renderPropPanel();
+        const svg = els.preview.querySelector("svg");
+        if (svg) applySelection(svg);
+        highlightList();
+      }
+    }
+    closeToolbarMenus(target);
+  });
+
 }
 
 function wireNativeMenuActions() {
@@ -4098,6 +5151,7 @@ function wireNativeMenuActions() {
   state.nativeMenuWired = true;
   const actionToDomId = {
     "file:new": "btnNew",
+    "file:clearAll": "btnClearAll",
     "file:open": "btnOpen",
     "file:save": "btnSave",
     "file:saveAs": "btnSaveAs",
@@ -4110,6 +5164,8 @@ function wireNativeMenuActions() {
     "edit:undo": "btnUndo",
     "edit:redo": "btnRedo",
     "edit:format": "btnFormat",
+    "edit:group": "btnGroup",
+    "edit:equalize": "btnEqualize",
     "diagram:relayout": "btnRelayout",
     "view:zoomIn": "btnZoomIn",
     "view:zoomOut": "btnZoomOut",
@@ -4251,8 +5307,34 @@ function wireContextMenu() {
       const nodeId = getNodeIdFromGroup(nodeEl);
       const node = state.model.nodes.find((n) => n.id === nodeId);
       if (!node) return;
+      const applyToNodeOrSelection = (updater, dirtyMessage) => {
+        const selected =
+          state.selectedNodeIds.size > 1 && state.selectedNodeIds.has(node.id)
+            ? state.model.nodes.filter((n) => state.selectedNodeIds.has(n.id))
+            : [node];
+        let changed = false;
+        for (const n of selected) {
+          if (updater(n)) changed = true;
+        }
+        if (!changed) return;
+        renderFromModel();
+        pushHistory();
+        markModelDirty(dirtyMessage);
+      };
       showContextMenu(evt.clientX, evt.clientY, (menu) => {
         addCtxTitle(menu, `Node: ${node.id}`);
+        addCtxItem(menu, node.locked ? "Unlock" : "Lock", () => {
+          const next = !node.locked;
+          if (node.locked === next) return;
+          node.locked = next;
+          if (next) {
+            state.selectedNodeIds.delete(node.id);
+            if (state.selectedNodeId === node.id) state.selectedNodeId = null;
+          }
+          renderFromModel();
+          pushHistory();
+          markModelDirty("node lock changed");
+        });
         addCtxItem(menu, "選択", () => selectNodeById(node.id));
         addCtxItem(menu, "Connect mode ON", () => {
           selectNodeById(node.id);
@@ -4263,37 +5345,41 @@ function wireContextMenu() {
           {
             label: "Rectangle",
             onClick: () => {
-              node.shape = "rect";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node shape changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.shape || "") === "rect") return false;
+                n.shape = "rect";
+                return true;
+              }, "node shape changed");
             }
           },
           {
             label: "Round",
             onClick: () => {
-              node.shape = "round";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node shape changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.shape || "") === "round") return false;
+                n.shape = "round";
+                return true;
+              }, "node shape changed");
             }
           },
           {
             label: "Circle",
             onClick: () => {
-              node.shape = "circle";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node shape changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.shape || "") === "circle") return false;
+                n.shape = "circle";
+                return true;
+              }, "node shape changed");
             }
           },
           {
             label: "Diamond",
             onClick: () => {
-              node.shape = "diamond";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node shape changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.shape || "") === "diamond") return false;
+                n.shape = "diamond";
+                return true;
+              }, "node shape changed");
             }
           }
         ]);
@@ -4301,37 +5387,41 @@ function wireContextMenu() {
           {
             label: "Blue",
             onClick: () => {
-              node.className = "accent-blue";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node class changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.className || "") === "accent-blue") return false;
+                n.className = "accent-blue";
+                return true;
+              }, "node class changed");
             }
           },
           {
             label: "Green",
             onClick: () => {
-              node.className = "accent-green";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node class changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.className || "") === "accent-green") return false;
+                n.className = "accent-green";
+                return true;
+              }, "node class changed");
             }
           },
           {
             label: "Amber",
             onClick: () => {
-              node.className = "accent-amber";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node class changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.className || "") === "accent-amber") return false;
+                n.className = "accent-amber";
+                return true;
+              }, "node class changed");
             }
           },
           {
             label: "Red",
             onClick: () => {
-              node.className = "accent-red";
-              renderFromModel();
-              pushHistory();
-              markModelDirty("node class changed");
+              applyToNodeOrSelection((n) => {
+                if ((n.className || "") === "accent-red") return false;
+                n.className = "accent-red";
+                return true;
+              }, "node class changed");
             }
           }
         ]);
@@ -4391,8 +5481,7 @@ function wireContextMenu() {
           markModelDirty("node pin changed");
         });
         addCtxItem(menu, "削除", () => {
-          state.selectedNodeId = node.id;
-          state.selectedEdgeId = null;
+          selectNodeById(node.id);
           deleteSelected();
         });
       });
@@ -4416,8 +5505,7 @@ function wireContextMenu() {
           markModelDirty("edge style changed");
         });
         addCtxItem(menu, "削除", () => {
-          state.selectedEdgeId = edge.id;
-          state.selectedNodeId = null;
+          selectEdgeById(edge.id);
           deleteSelected();
         });
       });
@@ -4527,8 +5615,40 @@ function wireSplitters() {
 }
 
 function wireModelControls() {
-  els.btnAddNode.addEventListener("click", () => {
+  if (els.nodeList) {
+    els.nodeList.addEventListener("click", (evt) => {
+      const target = evt.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".item")) return;
+      clearSelectionState();
+      renderPropPanel();
+      const svg = els.preview.querySelector("svg");
+      if (svg) applySelection(svg);
+      highlightList();
+    });
+  }
+
+  els.btnAddNode.addEventListener("click", async () => {
     const roleId = els.selRole.value;
+    if (roleId === "__free_box__") {
+      const label = sanitizeFreeBoxLabel(await requestTextInput("Free Box label", ""));
+      if (!label) return;
+      const ids = new Set(state.model.nodes.map((n) => n.id));
+      const id = nextId("FB", ids);
+      state.model.nodes.push({
+        id,
+        label,
+        role: "free_box",
+        shape: "rect",
+        boundaryId: null,
+        groupId: null,
+        groupName: null
+      });
+      pushHistory();
+      renderFromModel();
+      markModelDirty("node added");
+      return;
+    }
     const role = state.pack.roles[roleId];
     if (!role) return;
     const ids = new Set(state.model.nodes.map((n) => n.id));
@@ -4588,19 +5708,31 @@ function wireKeys() {
         const svg = els.preview.querySelector("svg");
         if (svg) applyConnectHandles(svg);
       }
-      state.selectedNodeId = null;
-      state.selectedEdgeId = null;
+      clearSelectionState();
       renderPropPanel();
       const svg = els.preview.querySelector("svg");
       if (svg) applySelection(svg);
       highlightList();
     }
     if (key === "delete" || key === "backspace") {
+      evt.preventDefault();
       deleteSelected();
+    }
+    if (evt.altKey && ["arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+      evt.preventDefault();
+      const step = evt.shiftKey ? 10 : 1;
+      if (key === "arrowup") nudgeSelectedNodes(0, -step);
+      if (key === "arrowdown") nudgeSelectedNodes(0, step);
+      if (key === "arrowleft") nudgeSelectedNodes(-step, 0);
+      if (key === "arrowright") nudgeSelectedNodes(step, 0);
+      return;
     }
     if (key === "tab") {
       evt.preventDefault();
-      const list = [...state.model.nodes.map((n) => ({ type: "node", id: n.id })), ...state.model.edges.map((e) => ({ type: "edge", id: e.id }))];
+      const list = [
+        ...state.model.nodes.filter((n) => !n.locked).map((n) => ({ type: "node", id: n.id })),
+        ...state.model.edges.map((e) => ({ type: "edge", id: e.id }))
+      ];
       if (!list.length) return;
       let idx = list.findIndex((x) => x.id === (state.selectedNodeId || state.selectedEdgeId));
       if (idx < 0) idx = 0;
@@ -4624,8 +5756,20 @@ function wireNewDialog() {
     if (evt.target === els.newDialog) close();
   });
   els.newDialog.querySelectorAll("[data-template]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const kind = btn.getAttribute("data-template");
+      state.pendingAutoFit = true;
+      const modelTemplate = buildTemplateModel(kind);
+      if (modelTemplate) {
+        state.model = modelTemplate;
+        if (els.selDir) els.selDir.value = modelTemplate.direction || els.selDir.value;
+        renderFromModel();
+        state.filePath = null;
+        setFileInfo();
+        pushHistory();
+        close();
+        return;
+      }
       const text = kind === "sample" ? buildSampleMermaid() : buildTemplateMermaid(kind);
       if (kind === "empty") {
         state.model = {
@@ -4642,7 +5786,7 @@ function wireNewDialog() {
         renderFromModel();
       } else {
         updateEditorText(text);
-        void renderFromText({ live: false });
+        await renderFromText({ live: false });
       }
       state.filePath = null;
       setFileInfo();
@@ -4785,6 +5929,7 @@ async function boot() {
   state.statusDetailsOpen = statusDetailsOpen === "1";
   const inspectorVisible = localStorage.getItem("ae:inspectorVisible");
   state.inspectorVisible = inspectorVisible === "1";
+  applyLanguageUi(true);
   applyInspectorVisibility();
   if (els.internalPanel) {
     const open = localStorage.getItem("ae:internalPanelOpen");
@@ -4797,13 +5942,17 @@ async function boot() {
   updateInternalToggleVisibility();
   const savedProblemsH = localStorage.getItem("ae:problemsHeight");
   if (savedProblemsH) {
-    document.documentElement.style.setProperty("--problems-h", savedProblemsH);
+    const h = normalizeProblemsHeight(savedProblemsH);
+    if (h) {
+      document.documentElement.style.setProperty("--problems-h", `${h}px`);
+    }
   }
   await initEditor();
   refreshSelectors();
   syncEditorReadOnly();
   updateApplyButton();
   setFileInfo();
+  void refreshAppVersion();
   applyZoom();
   updateDprStatus();
   const onViewportScaleChanged = debounce(() => {
@@ -4835,8 +5984,8 @@ async function boot() {
     const prefOzone = storedOzone || (diag && diag.ozoneHint) || "auto";
     els.selOzone.value = String(prefOzone);
   }
-  if (els.inspectorBody) els.inspectorBody.textContent = "Select a node/edge to edit";
-  setInspectorHeader("Inspector", "Select", "muted");
+  if (els.inspectorBody) els.inspectorBody.textContent = t("inspectorSelectHint");
+  setInspectorHeader(t("inspectorTitle"), t("inspectorSelect"), "muted");
   await refreshEntitlements("boot");
 
   wireToolbar();
@@ -4877,6 +6026,10 @@ async function boot() {
       updateEditorText(sample);
       await renderFromText({ live: false });
     }
+  }
+
+  if (localStorage.getItem(ONBOARDING_SEEN_KEY) !== "true") {
+    openTipsDialog({ persistSeen: false });
   }
 }
 

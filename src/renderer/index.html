@@ -14,7 +14,6 @@
           worker-src 'self' blob:;
           base-uri 'none';
           form-action 'none';
-          frame-ancestors 'none';
         ">
   <title>Andersen Editor</title>
 
@@ -32,13 +31,16 @@
 <body>
   <div id="newDialog" class="modal hidden">
     <div class="modalCard">
-      <div class="modalTitle">新規作成</div>
+      <div id="lblNewDialogTitle" class="modalTitle">新規作成</div>
       <div class="modalBody">
         <button class="btn modalBtn" data-template="empty">Empty</button>
         <button class="btn modalBtn" data-template="sample">Infra Sample</button>
         <button class="btn modalBtn" data-template="web3">Web 3-Tier</button>
         <button class="btn modalBtn" data-template="vpn">VPN</button>
         <button class="btn modalBtn" data-template="simple">Simple Flow</button>
+        <button class="btn modalBtn" data-template="workflow">Workflow</button>
+        <button class="btn modalBtn" data-template="org">Org chart</button>
+        <button class="btn modalBtn" data-template="infra">Infra</button>
       </div>
       <div class="modalFooter">
         <button id="btnNewCancel" class="btn">Cancel</button>
@@ -59,10 +61,10 @@
   </div>
   <div id="exportDialog" class="modal hidden">
     <div class="modalCard exportCard">
-      <div class="modalTitle">Export</div>
+      <div id="lblExportDialogTitle" class="modalTitle">Export</div>
       <div class="modalBody exportBody">
         <div class="propRow">
-          <label class="propLabel" for="exportFormat">形式</label>
+          <label id="lblExportFormat" class="propLabel" for="exportFormat">形式</label>
           <select id="exportFormat" class="select">
             <option value="mermaid">Mermaid source (.mmd)</option>
             <option value="svg">SVG (.svg)</option>
@@ -72,7 +74,7 @@
           </select>
         </div>
         <div class="propRow">
-          <label class="propLabel" for="exportPathInput">保存先（パス）</label>
+          <label id="lblExportPath" class="propLabel" for="exportPathInput">保存先（パス）</label>
           <div class="row">
             <input id="exportPathInput" class="input wide mono" list="exportRecentList" placeholder="/home/user/exports/diagram.mmd" />
             <datalist id="exportRecentList"></datalist>
@@ -80,7 +82,7 @@
           </div>
         </div>
         <div id="exportPngQualityRow" class="propRow hidden">
-          <label class="propLabel" for="exportPngQuality">PNG品質</label>
+          <label id="lblExportPngQuality" class="propLabel" for="exportPngQuality">PNG品質</label>
           <div class="row">
             <select id="exportPngQuality" class="select">
               <option value="standard">Standard</option>
@@ -91,7 +93,7 @@
         </div>
         <label class="toggle">
           <input type="checkbox" id="exportOpenFolder" />
-          Open folder after export
+          <span id="lblExportOpenFolder">Open folder after export</span>
         </label>
         <div id="exportError" class="exportError hidden"></div>
       </div>
@@ -103,7 +105,7 @@
   </div>
   <div id="proDialog" class="modal hidden">
     <div class="modalCard">
-      <div class="modalTitle">Pro Unlock</div>
+      <div id="lblProDialogTitle" class="modalTitle">Pro Unlock</div>
       <div class="modalBody">
         <div id="proStatusText" class="mono">Status: Free</div>
         <div id="proStatusError" class="exportError hidden"></div>
@@ -112,6 +114,22 @@
         <button id="btnProRestore" class="btn" type="button">購入を復元</button>
         <button id="btnProPurchase" class="btn" type="button">Proを有効化</button>
         <button id="btnProClose" class="btn" type="button">閉じる</button>
+      </div>
+    </div>
+  </div>
+  <div id="tipsDialog" class="modal hidden">
+    <div class="modalCard">
+      <div id="lblTipsTitle" class="modalTitle">Quick Tips</div>
+      <div class="modalBody">
+        <div id="tipsLine1" class="mono">1. Drag: 範囲選択</div>
+        <div id="tipsLine2" class="mono">2. Shift+Click: 複数選択の追加/解除</div>
+        <div id="tipsLine3" class="mono">3. Right Click: 形/色/Lock</div>
+        <div id="tipsLine4" class="mono">4. Group / Ungroup: まとめる/解除</div>
+        <div id="tipsLine5" class="mono">5. Align / Distribute: 整列・等間隔</div>
+        <div id="tipsLine6" class="mono">6. 全消去：空白（Blank）に戻す（Undo可）</div>
+      </div>
+      <div class="modalFooter">
+        <button id="btnTipsGotIt" class="btn" type="button">Got it</button>
       </div>
     </div>
   </div>
@@ -131,11 +149,12 @@
               <path d="M4 2h5l3 3v9H4z"></path>
               <path d="M9 2v3h3"></path>
             </svg>
-            <span>File</span>
+            <span id="lblMenuFile">File</span>
           </summary>
           <div class="menuPanel">
             <button id="btnNew" class="btn">新規</button>
             <button id="btnOpen" class="btn">開く</button>
+            <button id="btnClearAll" class="btn">全消去 / Clear All</button>
             <button id="btnSave" class="btn">保存</button>
             <button id="btnSaveAs" class="btn">名前を付けて保存</button>
           </div>
@@ -147,7 +166,7 @@
               <path d="M6 3.5h4"></path>
               <path d="M6.5 2h3a1 1 0 0 1 1 1v1h-5V3a1 1 0 0 1 1-1z"></path>
             </svg>
-            <span>Clipboard</span>
+            <span id="lblMenuClipboard">Clipboard</span>
           </summary>
           <div class="menuPanel">
             <button id="btnCopyMermaid" class="btn">Copy Mermaid</button>
@@ -163,7 +182,7 @@
               <path d="M5.5 6.5 8 9l2.5-2.5"></path>
               <path d="M3 10.5v2.5h10v-2.5"></path>
             </svg>
-            <span>Export</span>
+            <span id="lblMenuExport">Export</span>
           </summary>
           <div class="menuPanel">
             <button id="btnExportMermaid" class="btn">Mermaid</button>
@@ -173,8 +192,35 @@
             <button id="btnExportModelJson" class="btn">MODEL(JSON)</button>
           </div>
         </details>
+        <details class="menu">
+          <summary class="btn withIcon">
+            <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 3.5h8"></path>
+              <path d="M4 8h8"></path>
+              <path d="M4 12.5h8"></path>
+            </svg>
+            <span id="lblMenuEdit">Edit</span>
+          </summary>
+          <div class="menuPanel">
+            <button id="btnFormat" class="btn btnSecondary">Format</button>
+            <button id="btnApplyText" class="btn">Apply <span class="applyBadge">●</span></button>
+            <button id="btnRelayout" class="btn btnSecondary">Re-layout</button>
+            <button id="btnGroup" class="btn btnSecondary">Group</button>
+            <button id="btnEqualize" class="btn btnSecondary">Equalize</button>
+          </div>
+        </details>
       </div>
       <div class="group">
+        <button id="btnClearAllTop" class="btn withIcon" title="全消去 / Clear All">
+          <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3.5 4.5h9"></path>
+            <path d="M6 4.5v-1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1"></path>
+            <path d="M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8"></path>
+            <path d="M7 7v4"></path>
+            <path d="M9 7v4"></path>
+          </svg>
+          <span id="lblBtnClearTop">Clear</span>
+        </button>
         <button id="btnUndo" class="btn btnSecondary withIcon">
           <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M6.5 4 3.5 7l3 3"></path>
@@ -189,58 +235,84 @@
           </svg>
           <span>Redo</span>
         </button>
-        <button id="btnFormat" class="btn btnSecondary">Format</button>
-        <button id="btnApplyText" class="btn">Apply <span class="applyBadge">●</span></button>
-        <button id="btnRelayout" class="btn btnSecondary">Re-layout</button>
         <button id="btnConnect" class="btn btnSecondary">Connect</button>
         <button id="btnToggleInspector" class="btn btnToggle">Inspector</button>
       </div>
 
-      <div class="group">
-        <label class="lbl">Theme</label>
-        <select id="selTheme" class="select"></select>
-
-        <label class="lbl">Direction</label>
-        <select id="selDir" class="select">
-          <option value="LR">LR</option>
-          <option value="TB">TB</option>
-        </select>
-
-        <label class="lbl">Mode</label>
-        <select id="selMode" class="select">
-          <option value="model">モデル編集</option>
-          <option value="text" selected>テキスト編集</option>
-        </select>
-
-        <label class="toggle">
-          <input type="checkbox" id="toggleDevMode" />
-          Dev mode
-        </label>
-
-        <label class="lbl">UI Scale</label>
-        <select id="selUiScale" class="select">
-          <option value="auto">Auto</option>
-          <option value="0.8">80%</option>
-          <option value="0.9">90%</option>
-          <option value="1">100%</option>
-          <option value="1.1">110%</option>
-          <option value="1.2">120%</option>
-        </select>
-
-        <label class="lbl">Ozone</label>
-        <select id="selOzone" class="select">
-          <option value="auto">Auto</option>
-          <option value="wayland">Wayland</option>
-          <option value="x11">X11</option>
-        </select>
-      </div>
+      <details class="menu">
+        <summary class="btn withIcon">
+          <svg class="uiIcon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6.2 2.3 7 3.4h2l.8-1.1 1.5.9-.4 1.3 1.4 1.4 1.3-.4.9 1.5-1.1.8v2l1.1.8-.9 1.5-1.3-.4-1.4 1.4.4 1.3-1.5.9-.8-1.1H7l-.8 1.1-1.5-.9.4-1.3-1.4-1.4-1.3.4-.9-1.5 1.1-.8v-2l-1.1-.8.9-1.5 1.3.4 1.4-1.4-.4-1.3z"></path>
+            <circle cx="8" cy="8" r="1.9"></circle>
+          </svg>
+          <span id="lblMenuSettings">Settings</span>
+        </summary>
+        <div class="menuPanel">
+          <div class="settingRow">
+            <label id="lblLanguage" class="lbl" for="selLanguage">Language</label>
+            <select id="selLanguage" class="select wide">
+              <option value="system">System</option>
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="settingRow">
+            <label id="lblTheme" class="lbl" for="selTheme">Theme</label>
+            <select id="selTheme" class="select wide"></select>
+          </div>
+          <div class="settingRow">
+            <label id="lblDirection" class="lbl" for="selDir">Direction</label>
+            <select id="selDir" class="select wide">
+              <option value="LR">LR</option>
+              <option value="TB">TB</option>
+            </select>
+          </div>
+          <div class="settingRow">
+            <label id="lblMode" class="lbl" for="selMode">Mode</label>
+            <select id="selMode" class="select wide">
+              <option value="model">モデル編集</option>
+              <option value="text" selected>テキスト編集</option>
+            </select>
+          </div>
+          <label id="lblDevMode" class="toggle">
+            <input type="checkbox" id="toggleDevMode" />
+            <span id="lblDevModeText">Dev mode</span>
+          </label>
+          <div class="settingRow">
+            <label id="lblUiScale" class="lbl" for="selUiScale">UI Scale</label>
+            <select id="selUiScale" class="select wide">
+              <option value="auto">Auto</option>
+              <option value="0.8">80%</option>
+              <option value="0.9">90%</option>
+              <option value="1">100%</option>
+              <option value="1.1">110%</option>
+              <option value="1.2">120%</option>
+            </select>
+          </div>
+          <div class="settingRow">
+            <label id="lblOzone" class="lbl" for="selOzone">Ozone</label>
+            <select id="selOzone" class="select wide">
+              <option value="auto">Auto</option>
+              <option value="wayland">Wayland</option>
+              <option value="x11">X11</option>
+            </select>
+          </div>
+          <div class="settingRow">
+            <label id="lblHelp" class="lbl">Help</label>
+            <button id="btnShowTips" class="btn btnMini" type="button">Show Tips</button>
+          </div>
+        </div>
+      </details>
     </div>
 
     <div class="toolbarRight">
-      <button id="btnProUnlock" class="btn btnMini" type="button">Free</button>
-      <div class="status">
+      <div id="statusWrap" class="status">
         <div class="statusMain">
-          <span id="statusText" class="mono">ready</span>
+          <button id="btnProUnlock" class="btn btnMini statusPill" type="button">
+            <span id="proPlanText">Free</span>
+            <span class="statusDot" aria-hidden="true">·</span>
+            <span id="statusText" class="mono">ready</span>
+          </button>
           <button id="btnStatusDetails" class="btn btnMini statusDetailsBtn hidden" type="button">Details</button>
         </div>
         <div id="statusMetaWrap" class="statusMeta hidden">
@@ -268,11 +340,11 @@
     <section class="pane" id="paneLeft">
       <div class="paneHead">
         <button id="btnCollapseLeft" class="btn btnMini">⟨</button>
-        <span>テンプレ / モデル</span>
+        <span id="paneLeftTitle">テンプレ / モデル</span>
       </div>
       <div class="paneBody">
         <div class="block addCard">
-          <div class="blockTitle">ノード追加</div>
+          <div id="lblAddNode" class="blockTitle">ノード追加</div>
           <div class="row">
             <select id="selRole" class="select wide"></select>
             <button id="btnAddNode" class="btn">追加</button>
@@ -280,12 +352,12 @@
         </div>
 
         <div class="block">
-          <div class="blockTitle">ノード一覧</div>
+          <div id="lblNodeList" class="blockTitle">ノード一覧</div>
           <div id="nodeList" class="list"></div>
         </div>
 
         <div class="block addCard">
-          <div class="blockTitle">エッジ追加</div>
+          <div id="lblAddEdge" class="blockTitle">エッジ追加</div>
           <div class="row">
             <select id="selEdgeFrom" class="select"></select>
             <span class="mono">→</span>
@@ -299,12 +371,12 @@
         </div>
 
         <div class="block">
-          <div class="blockTitle">エッジ一覧</div>
+          <div id="lblEdgeList" class="blockTitle">エッジ一覧</div>
           <div id="edgeList" class="list"></div>
         </div>
 
         <div class="block addCard">
-          <div class="blockTitle">境界（subgraph）追加</div>
+          <div id="lblAddBoundary" class="blockTitle">境界（subgraph）追加</div>
           <div class="row">
             <select id="selBoundaryRole" class="select wide"></select>
             <button id="btnAddBoundary" class="btn">境界追加</button>
@@ -312,12 +384,12 @@
         </div>
 
         <div class="block">
-          <div class="blockTitle">境界一覧</div>
+          <div id="lblBoundaryList" class="blockTitle">境界一覧</div>
           <div id="boundaryList" class="list"></div>
         </div>
 
         <div class="block">
-          <div class="blockTitle">プロパティ</div>
+          <div id="lblProperties" class="blockTitle">プロパティ</div>
           <div id="propPanel" class="props mono">未選択</div>
         </div>
       </div>
@@ -327,7 +399,7 @@
 
     <section class="pane" id="paneCenter">
       <div class="paneHead">
-        <span>プレビュー</span>
+        <span id="paneCenterTitle">プレビュー</span>
       </div>
       <div class="paneBody previewBody" id="previewWrap">
         <div class="previewZoom">
@@ -353,6 +425,21 @@
             <div></div>
           </div>
         </div>
+        <div id="selectionActions" class="selectionActions hidden" aria-hidden="true">
+          <span id="selectionCount" class="mono">Selected: 0</span>
+          <button id="btnSelectionAlignL" class="btn btnMini hidden">L</button>
+          <button id="btnSelectionAlignC" class="btn btnMini hidden">C</button>
+          <button id="btnSelectionAlignR" class="btn btnMini hidden">R</button>
+          <button id="btnSelectionAlignT" class="btn btnMini hidden">T</button>
+          <button id="btnSelectionAlignM" class="btn btnMini hidden">M</button>
+          <button id="btnSelectionAlignB" class="btn btnMini hidden">B</button>
+          <button id="btnSelectionDistH" class="btn btnMini hidden">Dist H</button>
+          <button id="btnSelectionDistV" class="btn btnMini hidden">Dist V</button>
+          <button id="btnSelectionGroup" class="btn btnMini">Group</button>
+          <button id="btnSelectionEqualize" class="btn btnMini">Equalize</button>
+          <button id="btnSelectionUngroup" class="btn btnMini hidden">Ungroup</button>
+          <button id="btnSelectionDelete" class="btn btnMini">Delete</button>
+        </div>
         <div id="preview" class="preview"></div>
       </div>
     </section>
@@ -362,16 +449,16 @@
     <section class="pane" id="paneRight">
       <div class="paneHead">
         <button id="btnCollapseRight" class="btn btnMini">⟩</button>
-        <span>Inspector / Mermaid</span>
+        <span id="paneRightTitle">Inspector / Mermaid</span>
       </div>
       <div class="paneBody">
         <div class="editorArea">
           <details id="internalPanel" class="internalPanel hidden">
-            <summary class="internalSummary">Internal blocks</summary>
+            <summary id="lblInternalBlocks" class="internalSummary">Internal blocks</summary>
             <div class="editorToolbar">
               <label class="toggle" id="internalToggleWrap">
                 <input type="checkbox" id="toggleInternalBlocks" />
-                Show internal blocks (MODEL/RAW)
+                <span id="lblShowInternalBlocks">Show internal blocks (MODEL/RAW)</span>
               </label>
             </div>
           </details>
@@ -388,7 +475,7 @@
         <div class="hsplitter" data-split="problems"></div>
         <div class="problems">
           <div class="problemsHead">
-            <span>Problems</span>
+            <span id="lblProblems">Problems</span>
             <button id="btnToggleProblems" class="btn btnMini">Toggle</button>
           </div>
           <div id="problemsList" class="problemsList"></div>
@@ -409,9 +496,11 @@
 
   <footer class="footer">
     <span class="mono" id="fileInfo">未保存</span>
+    <button id="btnReportBug" class="btn btnMini" type="button">Report a bug</button>
+    <span class="mono" id="appVersion">v-</span>
   </footer>
 
-  <script src="./api-shim.js"></script>
+  <script type="module" src="./api-shim.js" vite-ignore></script>
   <script type="module" src="./renderer.js"></script>
 </body>
 </html>

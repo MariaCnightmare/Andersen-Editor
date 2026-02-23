@@ -208,8 +208,28 @@ function createWindow() {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  mainWindow.webContents.on("console-message", (_evt, level, message, line, sourceId) => {
-    const src = sourceId ? sourceId.split("/").slice(-1)[0] : "";
+  // Support both modern and legacy Electron console-message payloads.
+  // Using rest args avoids relying on deprecated fixed-arity callback style.
+  mainWindow.webContents.on("console-message", (...args) => {
+    let level = "info";
+    let message = "";
+    let line = 0;
+    let sourceId = "";
+
+    const detail = args[1];
+    if (detail && typeof detail === "object" && ("message" in detail || "level" in detail)) {
+      level = detail.level ?? level;
+      message = detail.message ?? "";
+      line = detail.lineNumber ?? detail.line ?? 0;
+      sourceId = detail.sourceId ?? detail.source ?? "";
+    } else {
+      level = args[1] ?? level;
+      message = args[2] ?? "";
+      line = args[3] ?? 0;
+      sourceId = args[4] ?? "";
+    }
+
+    const src = sourceId ? String(sourceId).split("/").slice(-1)[0] : "";
     console.log(`[renderer:${level}] ${message} ${src ? `(${src}:${line})` : ""}`);
   });
 
@@ -375,6 +395,10 @@ ipcMain.handle("entitlements:purchasePro", async () => {
 
 ipcMain.handle("entitlements:restore", async () => {
   return entitlements.restore();
+});
+
+ipcMain.handle("app:getVersion", async () => {
+  return { ok: true, version: app.getVersion() };
 });
 
 ipcMain.handle("diag:copyToClipboard", async () => {
@@ -715,6 +739,17 @@ ipcMain.handle("shell:showItemInFolder", async (_evt, args) => {
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err?.message || "open folder failed" };
+  }
+});
+
+ipcMain.handle("shell:openExternalUrl", async (_evt, args) => {
+  try {
+    const url = String(args?.url || "").trim();
+    if (!url) return { ok: false, error: "url is empty." };
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || "open external failed" };
   }
 });
 
