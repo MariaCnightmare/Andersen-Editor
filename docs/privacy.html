@@ -1,6 +1,177 @@
-<!doctype html><html lang='ja'><head><meta charset='utf-8'><meta name='viewport'
-  content='width=device-width,initial-scale=1'><title>Privacy</title></head><body style='margin:0;background:#0b1017;color:#e6edf7;font-
-  family:sans-serif'><main style='max-width:920px;margin:auto;padding:20px'><h1>プライバシーポリシー / Privacy Policy</h1><p>データ収集な
-  し / No personal data collection.</p><p>外部通信なし / No required external network communication.</p><p>ローカルのみ / Data is
-  processed locally on device.</p><p><a href='./index.html' style='color:#8be9fd'>Home</a> | <a href='./support.html'
-  style='color:#8be9fd'>Support</a></p></main></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Andersen-Editor | Privacy Policy</title>
+  <meta name="description" content="Andersen-Editor のプライバシーポリシー。データ収集、通信、保存、第三者提供、問い合わせ窓口について説明します。" />
+  <style>
+    :root {
+      --bg: #0b1017;
+      --bg-soft: #131b27;
+      --text: #e6edf7;
+      --muted: #9aa9bf;
+      --line: #263245;
+      --accent: #8be9fd;
+      --card: #111927;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 480px at 90% -20%, #1d3554 0%, rgba(29,53,84,0) 60%),
+        radial-gradient(800px 400px at -10% 10%, #19304a 0%, rgba(25,48,74,0) 60%),
+        var(--bg);
+      line-height: 1.75;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { width: min(980px, 92%); margin: 0 auto; }
+    header {
+      position: sticky;
+      top: 0;
+      background: rgba(11,16,23,0.82);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+      z-index: 10;
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 70px;
+      padding: 10px 0;
+    }
+    h1 { margin: 0; font-size: 1.05rem; }
+    nav { display: flex; gap: 14px; font-size: 0.94rem; }
+    main { padding: 34px 0 44px; }
+    .hero h2 { margin: 0 0 12px; font-size: 1.8rem; }
+    .note { color: var(--muted); margin: 0 0 18px; }
+    .card {
+      background: linear-gradient(165deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+    .card h3 { margin: 0 0 10px; font-size: 1.1rem; }
+    ul { margin: 10px 0 0 1.2em; }
+    code {
+      background: #172131;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 0.9em;
+    }
+    footer {
+      padding: 20px 0 34px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .lang {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <h1>Andersen-Editor</h1>
+      <nav>
+        <a href="./index.html">Home</a>
+        <a href="./support.html">Support</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>プライバシーポリシー / Privacy Policy</h2>
+      <p class="note">
+        最終更新日 / Last updated: 2026-02-23
+      </p>
+    </section>
+
+    <div class="lang">
+      <section class="card">
+        <h3>1. 収集する情報 / Data Collection</h3>
+        <p>
+          Andersen-Editor は、個人情報（氏名・メールアドレス・位置情報等）を収集しません。<br>
+          Andersen-Editor does not collect personal data (name, email, location, etc.).
+        </p>
+        <ul>
+          <li>入力した Mermaid テキスト、図のデータは <strong>端末内で処理</strong>されます。</li>
+          <li>作成したファイル（.mmd/.svg/.png/.pdf 等）は <strong>ユーザーが保存した場所にのみ</strong>保存されます。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h3>2. 外部通信 / Network Access</h3>
+        <p>
+          基本動作はオフラインで完結します。<br>
+          The app is designed to work offline.
+        </p>
+        <ul>
+          <li>外部サーバーへの自動送信は行いません。</li>
+          <li>ユーザーが明示的に操作した場合（例: <code>Report a bug</code> でブラウザを開く）に限り、外部ページへ遷移します。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h3>3. 第三者提供 / Third-party Sharing</h3>
+        <p>
+          収集データがないため、第三者提供も行いません。<br>
+          Since no personal data is collected, no data is shared with third parties.
+        </p>
+      </section>
+
+      <section class="card">
+        <h3>4. ローカル保存 / Local Storage</h3>
+        <p>
+          アプリ設定（例: UIスケール、言語、オンボーディング表示済みフラグ等）は、端末内のローカルストレージに保存される場合があります。<br>
+          App settings (UI scale, language, onboarding flag, etc.) may be stored locally on your device.
+        </p>
+      </section>
+
+      <section class="card">
+        <h3>5. 診断情報 / Diagnostics</h3>
+        <p>
+          問題調査のために「Copy diagnostics」等で診断テキストを取得できる場合があります。これはユーザーの操作によってコピーされるもので、アプリが自動送信することはありません。<br>
+          Diagnostics can be copied by user action. The app does not upload diagnostics automatically.
+        </p>
+      </section>
+
+      <section class="card">
+        <h3>6. お問い合わせ / Contact</h3>
+        <p>
+          不具合報告・質問は GitHub Issues からお願いします。<br>
+          For support, please use GitHub Issues.
+        </p>
+        <p>
+          <a href="https://github.com/MariaCnightmare/Andersen-Editor/issues">GitHub Issues</a>
+        </p>
+      </section>
+
+      <section class="card">
+        <h3>7. 改定 / Changes</h3>
+        <p>
+          本ポリシーは必要に応じて更新されます。更新内容は本ページに反映します。<br>
+          This policy may be updated. Changes will be posted on this page.
+        </p>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <a href="./index.html">Home</a> | <a href="./support.html">Support</a>
+    </div>
+  </footer>
+</body>
+</html>

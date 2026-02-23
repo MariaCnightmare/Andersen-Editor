@@ -1,7 +1,279 @@
-<!doctype html><html lang='ja'><head><meta charset='utf-8'><meta name='viewport'
-  content='width=device-width,initial-scale=1'><title>Andersen-Editor</title></head><body
-  style='margin:0;background:#0b1017;color:#e6edf7;font-family:sans-serif'><main style='max-width:920px;margin:auto;padding:20px'><h1><img
-  src='./Andersen-Editor_icon.png' style='width:28px;height:28px;vertical-align:middle;border-radius:6px'> Andersen-Editor</h1><p>Mermaid
-  テキストとGUIを往復できる図エディタ / Mermaid + Visual Diagram Editor</p><p><a href='https://github.com/MariaCnightmare/Andersen-Editor/
-  releases/latest' style='color:#8be9fd'>ダウンロード / Download</a></p><p><a href='./privacy.html' style='color:#8be9fd'>Privacy</a> | <a
-  href='./support.html' style='color:#8be9fd'>Support</a></p></main></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Andersen-Editor | Home</title>
+  <meta name="description" content="Andersen-Editor の公式サイト。アプリ概要、ダウンロード、スクリーンショット、関連リンクを掲載。" />
+  <style>
+    :root {
+      --bg: #0b1017;
+      --bg-soft: #131b27;
+      --text: #e6edf7;
+      --muted: #9aa9bf;
+      --line: #263245;
+      --accent: #4fc3f7;
+      --accent-2: #8be9fd;
+      --card: #111927;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 480px at 90% -20%, #1d3554 0%, rgba(29,53,84,0) 60%),
+        radial-gradient(800px 400px at -10% 10%, #19304a 0%, rgba(25,48,74,0) 60%),
+        var(--bg);
+      line-height: 1.65;
+    }
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { width: min(1080px, 92%); margin: 0 auto; }
+    header {
+      position: sticky;
+      top: 0;
+      background: rgba(11,16,23,0.82);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+      z-index: 10;
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 70px;
+      padding: 10px 0;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img {
+  <title>Andersen-Editor | Home</title>
+
+  <!-- Google Search Console verification (meta tag) -->
+  <meta name="google-site-verification" content="ezk8HE5MwP6o-MKdHUksqbvEcw8Usga90mJjpralxU4" />
+
+  <meta name="description" content="Andersen-Editor の公式サイト。アプリ概要、ダウンロード、スクリーンショット、関連リンクを掲載。" />
+  <style>
+    :root {
+      --bg: #0b1017;
+      --bg-soft: #131b27;
+      --text: #e6edf7;
+      --muted: #9aa9bf;
+      --line: #263245;
+      --accent: #4fc3f7;
+      --accent-2: #8be9fd;
+      --card: #111927;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 480px at 90% -20%, #1d3554 0%, rgba(29,53,84,0) 60%),
+        radial-gradient(800px 400px at -10% 10%, #19304a 0%, rgba(25,48,74,0) 60%),
+        var(--bg);
+      line-height: 1.65;
+    }
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { width: min(1080px, 92%); margin: 0 auto; }
+    header {
+      position: sticky;
+      top: 0;
+      background: rgba(11,16,23,0.82);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+      z-index: 10;
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 70px;
+      padding: 10px 0;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      object-fit: cover;
+      background: #0d1420;
+    }
+    .fallback {
+      display: none;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: #182436;
+      border: 1px solid var(--line);
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0.2px;
+    }
+    nav { display: flex; gap: 14px; font-size: 0.94rem; }
+    .hero { padding: 64px 0 30px; }
+    .hero h2 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 2.7rem);
+      line-height: 1.2;
+    }
+    .hero p { color: var(--muted); margin-top: 14px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+    .btn {
+      display: inline-block;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--text);
+      font-weight: 600;
+    }
+    .btn.primary {
+      background: linear-gradient(120deg, #1d5e88, #1d3f6e);
+      border-color: #2b658f;
+    }
+    section { padding: 22px 0; }
+    h3 { margin: 0 0 10px; font-size: 1.25rem; }
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .card {
+      background: linear-gradient(165deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .card h4 { margin: 0 0 8px; font-size: 1rem; }
+    .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .shots {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+    .shot {
+      min-height: 180px;
+      border: 1px dashed #415575;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: #8da6c8;
+      background: rgba(17,25,39,0.7);
+      text-align: center;
+      padding: 10px;
+      font-size: 0.92rem;
+    }
+    footer {
+      padding: 24px 0 36px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      border-top: 1px solid var(--line);
+      margin-top: 12px;
+    }
+    code {
+      background: #172131;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 0.88em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <div class="brand">
+        <img src="./Andersen-Editor_icon.png" alt="Andersen-Editor icon" onerror="this.style.display='none';document.getElementById('iconFallback').style.display='grid';" />
+        <div id="iconFallback" class="fallback">AE</div>
+        <h1>Andersen-Editor</h1>
+      </div>
+      <nav>
+        <a href="./index.html">Home</a>
+        <a href="./privacy.html">Privacy</a>
+        <a href="./support.html">Support</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>Mermaid テキストとGUIを往復できる図エディタ<br>Mermaid + Visual Diagram Editor</h2>
+      <p>
+        Andersen-Editor は、Mermaid を直接編集しながら GUI でも同時に編集できる Electron アプリです。
+        <br>
+        Andersen-Editor is an Electron app for bidirectional Mermaid text and GUI editing.
+      </p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/MariaCnightmare/Andersen-Editor/releases/latest">ダウンロード / Download</a>
+        <a class="btn" href="https://github.com/MariaCnightmare/Andersen-Editor">GitHub Repository</a>
+      </div>
+    </section>
+
+    <section>
+      <h3>主な機能 / Key Features</h3>
+      <div class="grid">
+        <article class="card">
+          <h4>双方向同期 / Bi-directional Sync</h4>
+          <p>テキスト編集とGUI編集が同期し、同じ図を異なる操作で扱えます。</p>
+        </article>
+        <article class="card">
+          <h4>Problems表示 / Error Visibility</h4>
+          <p>構文エラー時も最後に成功したプレビューを維持し、問題を明示します。</p>
+        </article>
+        <article class="card">
+          <h4>多形式出力 / Export Formats</h4>
+          <p>Mermaid, SVG, PNG, PDF, MODEL JSON に対応したエクスポート。</p>
+        </article>
+        <article class="card">
+          <h4>ローカル実行 / Local-first</h4>
+          <p>データ処理はローカルで完結し、外部サーバー連携を前提としません。</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h3>スクリーンショット / Screenshots</h3>
+      <div class="shots">
+        <div class="shot">スクリーンショットを追加してください<br>Add a screenshot (e.g. <code>docs/screenshot-main.png</code>)</div>
+        <div class="shot">編集画面やエクスポート画面の画像が推奨です<br>Recommended: editor view and export dialog</div>
+      </div>
+    </section>
+
+    <section>
+      <h3>関連リンク / Links</h3>
+      <div class="grid">
+        <article class="card">
+          <h4>プライバシーポリシー / Privacy Policy</h4>
+          <p><a href="./privacy.html">privacy.html</a></p>
+        </article>
+        <article class="card">
+          <h4>サポート / Support</h4>
+          <p><a href="./support.html">support.html</a></p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      © Andersen-Editor. This website is intended for Microsoft Partner Center listing fields.
+    </div>
+  </footer>
+</body>
+</html>
