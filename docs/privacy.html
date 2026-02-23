@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Andersen-Editor | Privacy Policy</title>
+  <style>
+    :root {
+      --bg: #0b1017;
+      --panel: #111927;
+      --line: #263245;
+      --text: #e6edf7;
+      --muted: #9aa9bf;
+      --accent: #8be9fd;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--text);
+      background: radial-gradient(900px 380px at 100% 0%, #1b3150 0%, rgba(27,49,80,0) 62%), var(--bg);
+      line-height: 1.7;
+    }
+    a { color: var(--accent); }
+    .container { width: min(920px, 92%); margin: 0 auto; }
+    header {
+      border-bottom: 1px solid var(--line);
+      background: rgba(11,16,23,0.85);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+    }
+    .header-inner {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand img {
+      width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line);
+      background: #0d1420; object-fit: cover;
+    }
+    .fallback {
+      display: none;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #182436;
+      color: #4fc3f7;
+      font-weight: 700;
+    }
+    nav { display: flex; gap: 14px; }
+    main { padding: 34px 0 40px; }
+    h1 { font-size: clamp(1.45rem, 3vw, 2rem); margin: 0 0 8px; }
+    h2 { font-size: 1.12rem; margin: 24px 0 8px; }
+    p, li { color: var(--muted); }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      margin-top: 14px;
+    }
+    .strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+    code {
+      background: #172131;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 0.9em;
+      color: var(--text);
+    }
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 16px 0 26px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <div class="brand">
+        <img src="./Andersen-Editor_icon.png" alt="Andersen-Editor icon" onerror="this.style.display='none';document.getElementById('iconFallback').style.display='grid';" />
+        <div id="iconFallback" class="fallback">AE</div>
+        <strong>Andersen-Editor</strong>
+      </div>
+      <nav>
+        <a href="./index.html">Home</a>
+        <a href="./privacy.html">Privacy</a>
+        <a href="./support.html">Support</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>プライバシーポリシー / Privacy Policy</h1>
+    <p>最終更新日 / Last Updated: 2026-02-16</p>
+
+    <section class="panel">
+      <h2>1. 収集するデータ / Data Collection</h2>
+      <p>
+        <span class="strong">Andersen-Editor は個人情報を収集しません。</span>
+        氏名、メールアドレス、位置情報、利用履歴などを開発者サーバーへ送信しません。
+      </p>
+      <p>
+        <span class="strong">Andersen-Editor does not collect personal data.</span>
+        We do not send your name, email, location, or usage data to developer-managed servers.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>2. 通信 / Network Communication</h2>
+      <p>
+        <span class="strong">本アプリは動作に必須の外部通信を行いません。</span>
+        編集・保存・表示処理はローカル環境で完結します。
+      </p>
+      <p>
+        <span class="strong">The app does not require external network communication for core functionality.</span>
+        Editing, rendering, and saving run locally.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>3. ローカル保存 / Local Storage</h2>
+      <ul>
+        <li>ユーザーが作成・保存したファイル（例: <code>.mmd</code>）は、ユーザーが指定したローカルパスに保存されます。</li>
+        <li>一部の設定情報は OS のアプリ設定領域（例: <code>userData</code>）に保存されることがあります。</li>
+        <li>これらのデータはユーザー端末内にのみ存在し、外部送信されません。</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>4. サードパーティ共有 / Third-party Sharing</h2>
+      <p>開発者は、ユーザーデータを第三者へ販売・共有しません。</p>
+      <p>We do not sell or share user data with third parties.</p>
+    </section>
+
+    <section class="panel">
+      <h2>5. お問い合わせ / Contact</h2>
+      <p>
+        ご質問は <a href="./support.html">support.html</a> を参照してください。
+      </p>
+      <p>
+        For questions, please see <a href="./support.html">support.html</a>.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">This policy page is prepared for Microsoft Partner Center listing requirements.</div>
+  </footer>
+</body>
+</html>

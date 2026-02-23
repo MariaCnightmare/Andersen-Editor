@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Andersen-Editor | Support</title>
+  <style>
+    :root {
+      --bg: #0b1017;
+      --panel: #111927;
+      --line: #263245;
+      --text: #e6edf7;
+      --muted: #9aa9bf;
+      --accent: #8be9fd;
+      --warn: #fbc87a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1000px 440px at -5% -10%, #1c3452 0%, rgba(28,52,82,0) 58%),
+        var(--bg);
+      line-height: 1.7;
+    }
+    .container { width: min(960px, 92%); margin: 0 auto; }
+    a { color: var(--accent); }
+    header {
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      background: rgba(11,16,23,0.85);
+      backdrop-filter: blur(8px);
+      z-index: 8;
+    }
+    .header-inner {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand img {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      object-fit: cover;
+      background: #0d1420;
+    }
+    .fallback {
+      display: none;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #182436;
+      color: #4fc3f7;
+      font-weight: 700;
+    }
+    nav { display: flex; gap: 14px; }
+    main { padding: 34px 0 44px; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.45rem, 3vw, 2rem); }
+    h2 { margin: 0 0 8px; font-size: 1.1rem; }
+    p, li { color: var(--muted); }
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      margin-top: 14px;
+    }
+    .section ul { margin: 8px 0 0 18px; }
+    .faq-item + .faq-item {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed #354861;
+    }
+    .q { color: var(--text); font-weight: 700; }
+    .warn {
+      color: var(--warn);
+      font-weight: 600;
+    }
+    code {
+      background: #172131;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 0.9em;
+      color: var(--text);
+    }
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 16px 0 26px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <div class="brand">
+        <img src="./Andersen-Editor_icon.png" alt="Andersen-Editor icon" onerror="this.style.display='none';document.getElementById('iconFallback').style.display='grid';" />
+        <div id="iconFallback" class="fallback">AE</div>
+        <strong>Andersen-Editor</strong>
+      </div>
+      <nav>
+        <a href="./index.html">Home</a>
+        <a href="./privacy.html">Privacy</a>
+        <a href="./support.html">Support</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>サポート / Support</h1>
+    <p>Andersen-Editor の問い合わせ先、FAQ、既知の問題、ログ取得方法を掲載しています。</p>
+
+    <section class="section">
+      <h2>問い合わせ先 / Contact</h2>
+      <ul>
+        <li>GitHub Issues: <a href="https://github.com/MariaCnightmare/Andersen-Editor/issues">https://github.com/MariaCnightmare/Andersen-Editor/issues</a></li>
+        <li>返信は GitHub 上で行います。 / Support responses are provided via GitHub.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>FAQ</h2>
+      <div class="faq-item">
+        <div class="q">Q. ファイルはどこに保存されますか？ / Where are files stored?</div>
+        <p>A. ユーザーが指定したローカルパスに保存されます。クラウド送信は行いません。</p>
+      </div>
+      <div class="faq-item">
+        <div class="q">Q. オフラインで使えますか？ / Can I use it offline?</div>
+        <p>A. はい。主要機能はローカルで動作します。</p>
+      </div>
+      <div class="faq-item">
+        <div class="q">Q. Parse エラー時はどうなりますか？ / What happens on parse errors?</div>
+        <p>A. 最後に成功したプレビューを保持し、Problems パネルにエラー内容が表示されます。</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>既知の問題 / Known Issues</h2>
+      <ul>
+        <li>複雑な Mermaid 記法では、変換後に手動調整が必要な場合があります。</li>
+        <li>環境依存でフォント表示やレンダリング差異が出ることがあります。</li>
+        <li class="warn">最新の既知問題は GitHub Issues を確認してください。</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>ログ取得方法 / How to Collect Logs</h2>
+      <ul>
+        <li>アプリ内メニューの診断機能（例: <code>Copy diagnostics</code>）を利用し、Issue に貼り付けてください。</li>
+        <li>問題再現手順、使用OS、アプリバージョンを併記してください。</li>
+        <li>個人情報や機密情報が含まれる場合は、投稿前に必ずマスクしてください。</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">Support page for Microsoft Partner Center listing URL fields.</div>
+  </footer>
+</body>
+</html>

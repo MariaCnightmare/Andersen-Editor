@@ -40,6 +40,10 @@ function installAppMenu(win) {
           accelerator: "CmdOrCtrl+O",
           click: () => sendAction(win, "file:open")
         },
+        {
+          label: "全消去 / Clear All",
+          click: () => sendAction(win, "file:clearAll")
+        },
         { type: "separator" },
         {
           label: "保存",

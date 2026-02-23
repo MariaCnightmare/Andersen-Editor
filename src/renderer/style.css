@@ -196,8 +196,8 @@ body.dragging {
 
 /* Toolbar */
 .toolbar {
-  display: grid;
-  grid-template-columns: minmax(230px, 320px) minmax(480px, 1fr) minmax(300px, 420px);
+  display: flex;
+  flex-wrap: nowrap;
   gap: 10px;
   align-items: center;
   padding: 8px 12px;
@@ -252,11 +252,13 @@ body.dragging {
 }
 
 .toolbarLeft {
+  flex: 0 0 auto;
   min-width: 0;
   position: relative;
 }
 
 .toolbarCenter {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -270,9 +272,12 @@ body.dragging {
 }
 
 .toolbarRight {
+  flex: 0 0 auto;
+  margin-left: auto;
   min-width: 0;
   display: flex;
   justify-content: flex-end;
+  align-items: flex-start;
 }
 
 .group {
@@ -353,6 +358,11 @@ body.dragging {
   justify-content: flex-start;
 }
 
+.menuPanel .settingRow {
+  display: grid;
+  gap: 4px;
+}
+
 /* Status */
 .status {
   padding: 6px 10px;
@@ -363,31 +373,23 @@ body.dragging {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-width: 220px;
+  min-width: 0;
+  max-width: min(460px, 42vw);
 }
 
 @media (max-width: 1400px) {
-  .toolbar {
-    grid-template-columns: minmax(200px, 280px) minmax(420px, 1fr) minmax(260px, 360px);
+  .status {
+    max-width: min(420px, 45vw);
   }
 }
 
 @media (max-width: 1120px) {
-  .toolbar {
-    grid-template-columns: minmax(180px, 1fr) minmax(280px, 1fr);
-    grid-template-areas:
-      "left right"
-      "center center";
-  }
-  .toolbarLeft { grid-area: left; }
-  .toolbarCenter { grid-area: center; }
-  .toolbarRight { grid-area: right; }
-  .toolbarCenter {
-    overflow-x: auto;
-    overflow-y: visible;
-  }
+  .toolbarCenter { max-width: 100%; }
   .brandSub {
     max-width: 240px;
+  }
+  .status {
+    max-width: min(360px, 48vw);
   }
 }
 
@@ -400,8 +402,19 @@ body.dragging {
 .statusMain {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 6px;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.statusDot {
+  opacity: .7;
 }
 
 .statusMeta {
@@ -544,7 +557,7 @@ body.dragging {
   /* 旧: flex: 0 0 200px; min-height: 120px; max-height: 260px; */
   flex: 0 0 auto;             /* 内容に応じて伸縮 */
   min-height: 0;              /* 空なら0に落とす */
-  max-height: none;
+  max-height: 45%;
   border-top: 1px solid var(--border-1);
   background: var(--surface-2);
   overflow: auto;
@@ -699,6 +712,11 @@ body.inspector-hidden .inlineInspector {
 #paneRight .paneBody > .hsplitter[data-split="problems"] { order: 2 !important; }
 #paneRight .paneBody > .problems { flex: 0 0 auto; order: 3 !important; }
 
+/* Keep Mermaid editor visible even when saved splitter state is extreme. */
+#paneRight .paneBody > .editorArea {
+  min-height: 180px;
+}
+
 .editorFallback {
   width: 100%;
   height: 100%;
@@ -722,6 +740,7 @@ body.inspector-hidden .inlineInspector {
 .editor {
   height: 100%;
   flex: 1 1 auto;
+  min-height: 160px;
   border: 1px solid var(--border-1);
   border-radius: var(--radius);
   overflow: hidden;
@@ -730,6 +749,7 @@ body.inspector-hidden .inlineInspector {
 
 .CodeMirror {
   height: 100%;
+  min-height: 160px;
   font-size: 13px;
   line-height: 1.6;
   background: color-mix(in srgb, var(--surface-2) 85%, black 15%);
@@ -755,6 +775,8 @@ body.inspector-hidden .inlineInspector {
 #previewWrap {
   position: relative;
   cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #previewWrap.hand-cursor {
@@ -795,6 +817,24 @@ body.connect-mode #previewWrap * {
   margin-bottom: 0;
   align-self: flex-start;
   box-shadow: none;
+}
+
+.selectionActions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-1);
+  background: var(--surface-2);
+}
+
+.selectionActions.hidden {
+  display: none;
 }
 .btnMini {
   padding: 2px 6px;
@@ -856,6 +896,13 @@ body.connect-mode #previewWrap * {
   pointer-events: none;
 }
 
+.preview svg .ae-selection-box {
+  fill: rgba(79, 212, 255, 0.12);
+  stroke: #4fd4ff;
+  stroke-width: 1.2px;
+  stroke-dasharray: 4 3;
+}
+
 .preview svg g.edgePath path,
 .preview svg g.edgeLabel {
   pointer-events: auto;
@@ -889,6 +936,14 @@ body.connect-mode #previewWrap * {
   stroke-width: 2px !important;
 }
 
+.preview svg g.node.isLocked {
+  opacity: 0.85;
+}
+
+.preview svg g.node.isLocked > * {
+  stroke-dasharray: 3 2;
+}
+
 .preview svg text.ae-pin {
   font-size: 10px;
   fill: #ffd36b;
@@ -912,6 +967,10 @@ body.connect-mode #previewWrap * {
 }
 .item.flash {
   animation: flashItem 1s ease-out;
+}
+
+.item.locked {
+  opacity: 0.75;
 }
 
 @keyframes flashItem {

@@ -101,6 +101,7 @@ export function generateMermaid(model, pack, theme) {
   for (const b of m.boundaries) {
     const bNodes = nodesByBoundary.get(b.id) || [];
     lines.push(`  subgraph ${b.id}[${sanitizeLabel(b.label)}]`);
+    lines.push(`    direction ${b.direction || "TB"}`);
     for (const n of bNodes) {
       const role = pack.roles[n.role];
       const shape = n.shape || (role ? role.shape : "rect");

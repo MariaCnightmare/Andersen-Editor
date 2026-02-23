@@ -16,14 +16,14 @@
 | Flowchart editing and Mermaid generation | `docs/SPEC.md:27` | Implemented | `src/core/generateMermaid.js:48`, `src/renderer/renderer.js:1182` | Keep |
 | Boundaries (subgraph) edit and reflect to Mermaid | `docs/SPEC.md:28` | Implemented | `src/renderer/renderer.js:2673`, `src/core/generateMermaid.js:67` | Keep |
 | Style (classDef/class/linkStyle/style) | `docs/SPEC.md:29` | Implemented | `src/core/generateMermaid.js:111`, `src/core/generateMermaid.js:118`, `src/core/generateMermaid.js:139` | Keep |
-| Export SVG/PNG/PDF | `docs/SPEC.md:30` | Implemented | `src/main/main.js:397`, `src/main/main.js:413`, `src/main/main.js:430` | Keep |
+| Export SVG/PNG/PDF | `docs/SPEC.md:30` | Implemented | `src/main/main.cjs:397`, `src/main/main.cjs:413`, `src/main/main.cjs:430` | Keep |
 | AE:MODEL round-trip | `docs/SPEC.md:12-19` | Implemented | `src/core/codec.js:12`, `src/renderer/renderer.js:1208` | Keep |
 | Text-first mode when AE:MODEL missing | `docs/SPEC.md:18-19` | Implemented | `src/renderer/renderer.js:2150` | Keep |
 | Preview drag position -> model persistence | User priority item | Implemented (MVP) | Drag/pin exists: `src/renderer/renderer.js` (pointer drag + `pinnedOffset`); reflected via `%%AE:MODEL`: `src/core/generateMermaid.js` | Keep (AE:MODEL is source of truth for layout) |
 | Edge add/rewire -> Mermaid reflection | User priority item | Implemented | Add edge: `src/renderer/renderer.js:2684`; connect rewire: `src/renderer/renderer.js:2031`; Mermaid output: `src/core/generateMermaid.js:95` | Keep |
 | Zone/group setting -> Mermaid reflection | User priority item | Implemented | Boundary add: `src/renderer/renderer.js:2690`; node zone assign/edit: `src/renderer/renderer.js:1681`; subgraph output: `src/core/generateMermaid.js:67` | Keep |
-| Export Mermaid (.mmd/.md/.txt) | User priority item | Implemented (MVP added) | IPC: `src/main/main.js:413`; preload API: `src/main/preload.js:13`; UI/menu: `src/renderer/index.html:75`, `src/main/appMenu.js:62`; handler: `src/renderer/renderer.js:2281` | Keep |
-| Export JSON(MODEL) | User priority item | Implemented (MVP added) | IPC: `src/main/main.js:451`; preload API: `src/main/preload.js:13`; UI: `src/renderer/index.html:79`; handler: `src/renderer/renderer.js:2294` | Keep |
+| Export Mermaid (.mmd/.md/.txt) | User priority item | Implemented (MVP added) | IPC: `src/main/main.cjs:413`; preload API: `src/main/preload.cjs:13`; UI/menu: `src/renderer/index.html:75`, `src/main/appMenu.cjs:62`; handler: `src/renderer/renderer.js:2281` | Keep |
+| Export JSON(MODEL) | User priority item | Implemented (MVP added) | IPC: `src/main/main.cjs:451`; preload API: `src/main/preload.cjs:13`; UI: `src/renderer/index.html:79`; handler: `src/renderer/renderer.js:2294` | Keep |
 | Node style edit from Inspector (fill/stroke/text) | User priority item | Implemented (MVP added) | Inspector inputs + model update: `src/renderer/renderer.js`; Mermaid `style <nodeId> ...` output: `src/core/generateMermaid.js` | Keep |
 | Edge style edit from Inspector (color/width/dashed) | User priority item | Implemented (MVP added) | Inspector inputs + model update: `src/renderer/renderer.js`; Mermaid `linkStyle <idx> ...` output: `src/core/generateMermaid.js` | Keep |
 

@@ -15,18 +15,18 @@
 | UI Action | Status | UI要素 | イベント接続 | 実処理/IPC |
 |---|---|---|---|---|
 | 新規 | Implemented | `src/renderer/index.html:99` `#btnNew` | `src/renderer/renderer.js:2931` | 新規ダイアログ (`wireNewDialog`) `src/renderer/renderer.js:3654` |
-| 開く | Implemented | `src/renderer/index.html:100` `#btnOpen` | `src/renderer/renderer.js:2938` | `window.api.openMmd` -> `dialog:openMmd` `src/main/main.js:445` |
-| 保存 | Implemented | `src/renderer/index.html:101` `#btnSave` | `src/renderer/renderer.js:2967` | `prepareContentForSave` 経由 `fs:saveMmd` `src/main/main.js:481` |
-| 名前を付けて保存 | Implemented | `src/renderer/index.html:102` `#btnSaveAs` | `src/renderer/renderer.js:2958` | `dialog:saveMmdAs` `src/main/main.js:462` |
+| 開く | Implemented | `src/renderer/index.html:100` `#btnOpen` | `src/renderer/renderer.js:2938` | `window.api.openMmd` -> `dialog:openMmd` `src/main/main.cjs:445` |
+| 保存 | Implemented | `src/renderer/index.html:101` `#btnSave` | `src/renderer/renderer.js:2967` | `prepareContentForSave` 経由 `fs:saveMmd` `src/main/main.cjs:481` |
+| 名前を付けて保存 | Implemented | `src/renderer/index.html:102` `#btnSaveAs` | `src/renderer/renderer.js:2958` | `dialog:saveMmdAs` `src/main/main.cjs:462` |
 | Copy Mermaid | Implemented | `src/renderer/index.html:108` | `src/renderer/renderer.js:2981` | `navigator.clipboard.writeText` |
 | Paste Mermaid | Implemented | `src/renderer/index.html:109` | `src/renderer/renderer.js:2989` | `navigator.clipboard.readText` + `renderFromText` |
 | Copy SVG | Implemented | `src/renderer/index.html:110` | `src/renderer/renderer.js:3002` | `getSvgText()` |
 | Copy PNG | Implemented | `src/renderer/index.html:111` | `src/renderer/renderer.js:3012` | `svgToPng()` + Clipboard API |
 | Export Mermaid | Implemented | `src/renderer/index.html:117` | `src/renderer/renderer.js:3070` | Exportモーダル `openExportDialog('mermaid')` `src/renderer/renderer.js:946` |
 | Export SVG | Implemented | `src/renderer/index.html:118` | `src/renderer/renderer.js:3075` | Exportモーダル `openExportDialog('svg')` `src/renderer/renderer.js:946` |
-| Export PNG | Implemented | `src/renderer/index.html:119` | `src/renderer/renderer.js:3079` | 既存 `export:png` `src/main/main.js:604` |
-| Export PDF | Implemented | `src/renderer/index.html:120` | `src/renderer/renderer.js:3092` | 既存 `export:pdf` `src/main/main.js:621` |
-| Export MODEL(JSON) | Implemented | `src/renderer/index.html:121` | `src/renderer/renderer.js:3099` | 既存 `export:modelJson` `src/main/main.js:647` |
+| Export PNG | Implemented | `src/renderer/index.html:119` | `src/renderer/renderer.js:3079` | 既存 `export:png` `src/main/main.cjs:604` |
+| Export PDF | Implemented | `src/renderer/index.html:120` | `src/renderer/renderer.js:3092` | 既存 `export:pdf` `src/main/main.cjs:621` |
+| Export MODEL(JSON) | Implemented | `src/renderer/index.html:121` | `src/renderer/renderer.js:3099` | 既存 `export:modelJson` `src/main/main.cjs:647` |
 
 ### Edit / Diagram / View
 | UI Action | Status | UI要素 | イベント接続 | 実処理 |
@@ -49,7 +49,7 @@
 | Edge context menu | Implemented | 右クリック `g.edgePath` | `src/renderer/renderer.js:3613` | 破線切替/削除 |
 
 ### Main menu bridge
-- Main menu action dispatch: `src/main/appMenu.js:33-229`
+- Main menu action dispatch: `src/main/appMenu.cjs:33-229`
 - Action -> DOM bridge: `src/preload/menuBridge.js:5-45`
 - Renderer側は該当ボタン click に集約（例: export `src/preload/menuBridge.js:12-16` -> `src/renderer/renderer.js:3069-3112`）
 
@@ -62,9 +62,9 @@
 - 対応: 実装済み。
   - Exportモーダル追加: `src/renderer/index.html:60-87`
   - パス検証/拡張子補正: `src/renderer/renderer.js:886-900`
-  - Browse: `chooseExportPath` IPC `src/main/main.js:518`
-  - 書き込み: `export:writeFile` IPC `src/main/main.js:545`
-  - フォルダを開く: `shell:showItemInFolder` `src/main/main.js:559`
+  - Browse: `chooseExportPath` IPC `src/main/main.cjs:518`
+  - 書き込み: `export:writeFile` IPC `src/main/main.cjs:545`
+  - フォルダを開く: `shell:showItemInFolder` `src/main/main.cjs:559`
 
 ### B. Mode selector（UI-only）
 - Feature名: `Mode` (`モデル編集/テキスト編集`)

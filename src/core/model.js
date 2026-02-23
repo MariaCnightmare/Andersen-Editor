@@ -19,7 +19,8 @@ function normalizeBoundary(boundary, index) {
   const id = String(boundary?.id || `B${index + 1}`);
   const label = String(boundary?.label || id);
   const role = String(boundary?.role || "vpc");
-  return { id, label, role };
+  const direction = normalizeDirection(boundary?.direction || "TB");
+  return { id, label, role, direction };
 }
 
 function normalizeNode(node, index, boundaryMap) {
@@ -37,6 +38,7 @@ function normalizeNode(node, index, boundaryMap) {
     groupName: normalizedBoundaryId ? boundaryMap.get(normalizedBoundaryId)?.label || null : null
   };
   if (node?.shape) out.shape = String(node.shape);
+  if (node?.locked != null) out.locked = !!node.locked;
   if (node?.comment != null) out.comment = String(node.comment);
   if (node?.className != null) out.className = String(node.className);
   if (node?.classDisplayName != null) out.classDisplayName = String(node.classDisplayName);

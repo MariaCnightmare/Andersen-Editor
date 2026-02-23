@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { summarizeGpuStatus, formatDiagnosticsText } = require("../src/main/gpuDiagnostics.js");
+const { summarizeGpuStatus, formatDiagnosticsText } = require("../src/main/gpuDiagnostics.cjs");
 
 test("gpu_status_enabled_when_core_features_enabled", () => {
   const summary = summarizeGpuStatus({
