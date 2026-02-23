@@ -3,6 +3,56 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Andersen-Editor | Home</title>
+  <meta name="description" content="Andersen-Editor の公式サイト。アプリ概要、ダウンロード、スクリーンショット、関連リンクを掲載。" />
+  <style>
+    :root {
+      --bg: #0b1017;
+      --bg-soft: #131b27;
+      --text: #e6edf7;
+      --muted: #9aa9bf;
+      --line: #263245;
+      --accent: #4fc3f7;
+      --accent-2: #8be9fd;
+      --card: #111927;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 480px at 90% -20%, #1d3554 0%, rgba(29,53,84,0) 60%),
+        radial-gradient(800px 400px at -10% 10%, #19304a 0%, rgba(25,48,74,0) 60%),
+        var(--bg);
+      line-height: 1.65;
+    }
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { width: min(1080px, 92%); margin: 0 auto; }
+    header {
+      position: sticky;
+      top: 0;
+      background: rgba(11,16,23,0.82);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+      z-index: 10;
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 70px;
+      padding: 10px 0;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img {
   <title>Andersen-Editor | Home</title>
 
   <!-- Google Search Console verification (meta tag) -->
