@@ -1193,6 +1193,14 @@ function hasCapability(capability) {
   return !!state.entitlements?.capabilities?.[capability];
 }
 
+function isStoreBuild() {
+  return !!state.entitlements?.storeBuild;
+}
+
+function getStoreProUnavailableMessage() {
+  return t("proStoreUnavailable");
+}
+
 function requiredCapabilityForExport(format, { pngScale = 1 } = {}) {
   const f = normalizeExportFormat(format);
   if (f === "pdf") return PRO_CAP_EXPORT_PDF;
@@ -1216,13 +1224,24 @@ function setProDialogError(message) {
 function updateProUi() {
   const isPro = !!state.entitlements?.isPro;
   const source = state.entitlements?.source || "free-default";
+  const storeBuild = isStoreBuild();
   const plan = isPro ? t("planPro") : t("planFree");
   if (els.proPlanText) els.proPlanText.textContent = plan;
   if (els.btnProUnlock) {
-    els.btnProUnlock.title = isPro ? t("proPlanTitleUnlocked", { source }) : t("proPlanTitleFree");
+    els.btnProUnlock.title = storeBuild
+      ? getStoreProUnavailableMessage()
+      : (isPro ? t("proPlanTitleUnlocked", { source }) : t("proPlanTitleFree"));
   }
   if (els.proStatusText) {
     els.proStatusText.textContent = t("proStatusLine", { plan, source });
+  }
+  if (els.btnProPurchase) {
+    els.btnProPurchase.disabled = storeBuild;
+    els.btnProPurchase.title = storeBuild ? getStoreProUnavailableMessage() : "";
+  }
+  if (els.btnProRestore) {
+    els.btnProRestore.disabled = storeBuild;
+    els.btnProRestore.title = storeBuild ? getStoreProUnavailableMessage() : "";
   }
   const lockPdf = !hasCapability(PRO_CAP_EXPORT_PDF);
   const lockModel = !hasCapability(PRO_CAP_EXPORT_MODEL_JSON);
@@ -1243,6 +1262,7 @@ async function refreshEntitlements(reason = "manual") {
     state.entitlements = {
       isPro: false,
       source: "unsupported",
+      storeBuild: false,
       capabilities: {
         [PRO_CAP_EXPORT_PDF]: false,
         [PRO_CAP_EXPORT_PNG_HIGHRES]: false,
@@ -1259,6 +1279,7 @@ async function refreshEntitlements(reason = "manual") {
     state.entitlements = {
       isPro: false,
       source: "error",
+      storeBuild: false,
       capabilities: {
         [PRO_CAP_EXPORT_PDF]: false,
         [PRO_CAP_EXPORT_PNG_HIGHRES]: false,
@@ -1289,6 +1310,13 @@ function closeProDialog() {
 async function handleProRequired(res, capability = null) {
   const requiredCapability = res?.requiredCapability || capability || null;
   await refreshEntitlements("pro-required");
+  if (isStoreBuild()) {
+    openProDialog({
+      requiredCapability: null,
+      message: getStoreProUnavailableMessage()
+    });
+    return;
+  }
   openProDialog({
     requiredCapability,
     message: res?.error || ""
@@ -1621,6 +1649,10 @@ function wireProDialog() {
   if (els.btnProUnlock) {
     els.btnProUnlock.addEventListener("click", async () => {
       await refreshEntitlements("open-pro-dialog");
+      if (isStoreBuild()) {
+        openProDialog({ message: getStoreProUnavailableMessage() });
+        return;
+      }
       openProDialog();
     });
   }
@@ -1634,6 +1666,11 @@ function wireProDialog() {
   }
   if (els.btnProPurchase) {
     els.btnProPurchase.addEventListener("click", async () => {
+      await refreshEntitlements("purchase-click");
+      if (isStoreBuild()) {
+        setProDialogError(getStoreProUnavailableMessage());
+        return;
+      }
       setProDialogError("");
       const res = await window.api?.entitlementsPurchasePro?.();
       if (!res?.ok) {
@@ -1647,6 +1684,11 @@ function wireProDialog() {
   }
   if (els.btnProRestore) {
     els.btnProRestore.addEventListener("click", async () => {
+      await refreshEntitlements("restore-click");
+      if (isStoreBuild()) {
+        setProDialogError(getStoreProUnavailableMessage());
+        return;
+      }
       setProDialogError("");
       const res = await window.api?.entitlementsRestore?.();
       if (!res?.ok) {

@@ -10,7 +10,8 @@ class EntitlementService {
   constructor({ logger = console } = {}) {
     this.logger = logger;
     this.bridge = createWindowsStoreBridge();
-    this.devPro = asBoolEnv("AE_DEV_PRO");
+    this.storeBuild = asBoolEnv("AE_STORE_BUILD");
+    this.devPro = asBoolEnv("AE_DEV_PRO") && !this.storeBuild;
     this.state = {
       isPro: false,
       source: "free-default",
@@ -18,7 +19,8 @@ class EntitlementService {
       capabilities: buildCapabilityStatus(false),
       lastError: null,
       bridgeAvailable: !!this.bridge?.available,
-      devOverride: this.devPro
+      devOverride: this.devPro,
+      storeBuild: this.storeBuild
     };
   }
 
@@ -33,10 +35,13 @@ class EntitlementService {
 
   async refresh(reason = "manual") {
     let isPro = false;
-    let source = "free-default";
+    let source = this.storeBuild ? "store-build" : "free-default";
     let lastError = null;
 
-    if (this.devPro) {
+    if (this.storeBuild) {
+      isPro = false;
+      source = "store-build";
+    } else if (this.devPro) {
       isPro = true;
       source = "dev-flag";
     } else if (this.bridge?.available) {
@@ -56,13 +61,22 @@ class EntitlementService {
       capabilities: buildCapabilityStatus(isPro),
       lastError,
       bridgeAvailable: !!this.bridge?.available,
-      devOverride: this.devPro
+      devOverride: this.devPro,
+      storeBuild: this.storeBuild
     };
     this.logger?.info?.(`[entitlements] refresh(${reason}) => ${isPro ? "PRO" : "FREE"} via ${source}`);
     return this.getStatus();
   }
 
   async purchasePro() {
+    if (this.storeBuild) {
+      return {
+        ok: false,
+        code: "STORE_DISABLED",
+        error: "Pro purchase is not available in this Store build yet.",
+        status: await this.refresh("purchase-store-disabled")
+      };
+    }
     if (this.devPro) {
       return { ok: true, status: await this.refresh("purchase-dev") };
     }
@@ -87,6 +101,14 @@ class EntitlementService {
   }
 
   async restore() {
+    if (this.storeBuild) {
+      return {
+        ok: false,
+        code: "STORE_DISABLED",
+        error: "Pro restore is not available in this Store build yet.",
+        status: await this.refresh("restore-store-disabled")
+      };
+    }
     if (this.devPro) {
       return { ok: true, status: await this.refresh("restore-dev") };
     }
@@ -119,4 +141,3 @@ module.exports = {
   createEntitlementService,
   resolveExportCapability
 };
-
